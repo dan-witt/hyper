@@ -25,7 +25,7 @@ export function makeTile(
       state: 'idle',
       reason: null,
       state_since: iso(60_000),
-      cwd: '/home/dan/work/billing',
+      cwd: '/home/user/work/billing',
       last_event: 'Stop',
       last_event_text: 'finished its turn',
       last_event_at: iso(90_000),
