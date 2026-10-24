@@ -27,7 +27,7 @@ Labels, descriptions, acknowledgements and hiding belong to the board; they neve
 ## Requirements
 
 - Linux with an X11 desktop. The window is placed through RandR and EWMH; it was built on GNOME.
-- [claude-control](https://github.com/dan-witt/claude-control), running, with its MCP token in `~/.config/claude-control/token`. hyper needs the `state_since`, `last_event_at`, `last_event_text` and `replaces` session fields, which are on claude-control's `dan/ech-18-board-session-fields` branch until it is merged.
+- [claude-control](https://github.com/dan-witt/claude-control), running, with its MCP token in `~/.config/claude-control/token`. hyper needs the `state_since`, `last_event_at`, `last_event_text` and `replaces` session fields, on claude-control's `main` since `a4a9a02`.
 - Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 - Node 24 and pnpm (`corepack enable`), to build the page.
 - Google Chrome, for the board window.
