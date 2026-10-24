@@ -30,6 +30,8 @@ Board layout and labels are kept in `~/.local/state/hyper/board.json`.
 | `GET /api/board` | Grid, tiles (each with its session) and daemon connection status |
 | `GET /api/events` | SSE: a `snapshot`, then `tile`, `tile_removed`, `grid` and `daemon` changes, and a `heartbeat` every 10s |
 | `POST /api/sessions/{id}/focus` | Switch tmux to the session's pane; 409 with the daemon's message on failure |
+| `POST /api/tiles/{id}/move` `{"cell": n}` | Put the tile in a cell, swapping with the tile there |
+| `POST /api/grid` `{"columns": c, "rows": r}` | Resize the grid; returns the size applied (rows grow to fit occupied cells) |
 
 POSTs need an `Origin` of the board itself (or a configured dev origin) and `Content-Type: application/json`.
 

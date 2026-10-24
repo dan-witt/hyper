@@ -1,3 +1,5 @@
+import type { BoardView } from './types'
+
 export type ActionResult = { ok: true } | { ok: false; message: string }
 
 async function post(path: string, body: unknown = {}): Promise<ActionResult> {
@@ -26,4 +28,21 @@ async function post(path: string, body: unknown = {}): Promise<ActionResult> {
 
 export function focusSession(sessionId: string): Promise<ActionResult> {
   return post(`/api/sessions/${encodeURIComponent(sessionId)}/focus`)
+}
+
+export function moveTile(sessionId: string, cell: number): Promise<ActionResult> {
+  return post(`/api/tiles/${encodeURIComponent(sessionId)}/move`, { cell })
+}
+
+export function setGrid(columns: number, rows: number): Promise<ActionResult> {
+  return post('/api/grid', { columns, rows })
+}
+
+export async function fetchBoard(): Promise<BoardView | null> {
+  try {
+    const response = await fetch('/api/board')
+    return response.ok ? ((await response.json()) as BoardView) : null
+  } catch {
+    return null
+  }
 }

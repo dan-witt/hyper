@@ -14,7 +14,7 @@ export function StatusBanner({ connection, daemon, loaded }: Props) {
   else if (!daemon.connected) message = `claude-control unreachable (${daemon.error ?? 'unknown'}) · retrying`
   if (!message) return null
   return (
-    <div role="status" className="banner">
+    <div role="status" className="banner" data-testid="status-banner">
       {message}
     </div>
   )

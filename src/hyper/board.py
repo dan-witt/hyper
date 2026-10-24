@@ -12,6 +12,7 @@ from .models import (
     BoardFile,
     Change,
     DaemonSession,
+    Grid,
     GridEvent,
     StoredTile,
     Tile,
@@ -20,6 +21,14 @@ from .models import (
 )
 
 log = logging.getLogger(__name__)
+
+
+class NoSuchTile(Exception):
+    pass
+
+
+class BoardError(Exception):
+    """A request the board cannot apply; the message is fit to show."""
 
 
 class Board:
@@ -109,6 +118,40 @@ class Board:
             if s is not None and t.acked_state_since not in (None, s.state_since):
                 t.acked_state_since = None
         self.sessions = listed
+
+    def _shown(self, session_id: str) -> StoredTile:
+        stored = self.data.tiles.get(session_id)
+        if stored is None or session_id not in self.sessions:
+            raise NoSuchTile(session_id)
+        return stored
+
+    def move(self, session_id: str, cell: int) -> list[Change]:
+        """Put a tile in `cell`, swapping with the tile already there."""
+        stored = self._shown(session_id)
+        if stored.hidden or stored.cell is None:
+            raise BoardError("a hidden tile has no cell")
+        grid = self.data.grid
+        if not 0 <= cell < grid.columns * grid.rows:
+            raise BoardError(f"cell {cell} is outside the {grid.columns}x{grid.rows} grid")
+
+        def apply() -> None:
+            for other in self.data.tiles.values():
+                if other is not stored and other.cell == cell:
+                    other.cell = stored.cell
+            stored.cell = cell
+
+        return self._mutate(apply)
+
+    def set_grid(self, columns: int, rows: int) -> list[Change]:
+        """Resize the grid. Cells keep their reading-order index, so tiles reflow when the
+        column count changes; rows never drop below what the occupied cells need."""
+
+        def apply() -> None:
+            taken = [t.cell for t in self.data.tiles.values() if t.cell is not None]
+            needed = max(taken) // columns + 1 if taken else 1
+            self.data.grid = Grid(columns=columns, rows=max(rows, needed))
+
+        return self._mutate(apply)
 
     def _free_cell(self) -> int:
         grid = self.data.grid

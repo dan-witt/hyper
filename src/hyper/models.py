@@ -119,6 +119,15 @@ BoardEvent = Annotated[
 Change = TileEvent | TileRemovedEvent | GridEvent
 
 
+class MoveRequest(Model):
+    cell: int = Field(ge=0)
+
+
+class GridRequest(Model):
+    columns: int = Field(ge=1, le=12)
+    rows: int = Field(ge=1, le=12)
+
+
 class FocusResult(Model):
     session_id: str
     pane: str

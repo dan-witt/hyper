@@ -20,7 +20,7 @@ test('shows the demo sessions with their states', async ({ page }) => {
   await expect(tile(page, 'auth')).toContainText('asking to use Edit')
   await expect(tile(page, 'docs')).toContainText('done')
   await expect(tile(page, 'infra')).toHaveAttribute('data-tone', 'idle')
-  await expect(page.getByRole('status')).toHaveCount(0)
+  await expect(page.getByTestId('status-banner')).toHaveCount(0)
 })
 
 test('a new session appears and a state change pulses', async ({ page, request }) => {
@@ -54,4 +54,42 @@ test('a failed focus shows on the tile', async ({ page, request }) => {
   await tile(page, 'infra').click()
   await expect(tile(page, 'infra').getByRole('alert')).toHaveText('session infra is not running in tmux')
   await fake(request, '/focus-error', { message: null })
+})
+
+async function drag(page: import('@playwright/test').Page, from: string, toCell: number) {
+  const source = await tile(page, from).boundingBox()
+  const target = await page.locator(`[data-cell="${toCell}"]`).boundingBox()
+  if (!source || !target) throw new Error('missing element')
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 12 })
+  await page.mouse.up()
+}
+
+test('dragging a tile moves it, swaps, survives a reload and does not focus', async ({ page, request }) => {
+  await page.goto('/')
+  await expect(tile(page, 'infra')).toBeVisible()
+  const focusedBefore = ((await (await request.get('/api/fake/focused')).json()) as string[]).length
+
+  await drag(page, 'infra', 5)
+  await expect(page.locator('[data-cell="5"]').getByTestId('tile')).toHaveAttribute('data-session', 'infra')
+
+  await drag(page, 'billing', 5)
+  await expect(page.locator('[data-cell="5"]').getByTestId('tile')).toHaveAttribute('data-session', 'billing')
+  await expect(page.locator('[data-cell="0"]').getByTestId('tile')).toHaveAttribute('data-session', 'infra')
+
+  await page.reload()
+  await expect(page.locator('[data-cell="5"]').getByTestId('tile')).toHaveAttribute('data-session', 'billing')
+  const focusedAfter = ((await (await request.get('/api/fake/focused')).json()) as string[]).length
+  expect(focusedAfter).toBe(focusedBefore)
+})
+
+test('grid size changes reflow the tiles', async ({ page, request }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('cell')).toHaveCount(6)
+  const r = await request.post('/api/grid', { data: { columns: 2, rows: 2 }, headers: ORIGIN })
+  expect(await r.json()).toEqual({ columns: 2, rows: 3 }) // cell 5 is occupied
+  await expect(page.getByTestId('cell')).toHaveCount(6)
+  await request.post('/api/grid', { data: { columns: 3, rows: 2 }, headers: ORIGIN })
+  await expect(page.getByTestId('cell')).toHaveCount(6)
 })

@@ -1,7 +1,9 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from hyper.board import Board, BoardStore
+import pytest
+
+from hyper.board import Board, BoardError, BoardStore, NoSuchTile
 from hyper.models import (
     BoardFile,
     DaemonSession,
@@ -162,3 +164,49 @@ def test_store_round_trip_and_bad_file(tmp_path):
     store.path.write_text("{not json")
     assert store.load() == BoardFile()
     assert (tmp_path / "hyper" / "board.json.bad").exists()
+
+
+def test_move_to_an_empty_cell_and_swap():
+    board = Board(BoardFile())
+    board.update([session("a", 1), session("b", 2)])
+    changes = board.move("a", 4)
+    assert cells(board) == {"a": 4, "b": 1}
+    assert [c.tile.session_id for c in changes if isinstance(c, TileEvent)] == ["a"]
+    changes = board.move("b", 4)
+    assert cells(board) == {"a": 1, "b": 4}
+    assert {c.tile.session_id for c in changes if isinstance(c, TileEvent)} == {"a", "b"}
+    assert board.move("b", 4) == []
+
+
+def test_move_refuses_unknown_hidden_and_out_of_range():
+    board = Board(BoardFile(tiles={"gone": StoredTile(cell=3)}))
+    board.update([session("a", 1), session("h", 2), session("gone", 3)])
+    board.data.tiles["h"].hidden, board.data.tiles["h"].cell = True, None
+    with pytest.raises(NoSuchTile):
+        board.move("nobody", 0)
+    with pytest.raises(BoardError, match="hidden"):
+        board.move("h", 0)
+    with pytest.raises(BoardError, match="outside the 3x2 grid"):
+        board.move("a", 6)
+
+
+def test_set_grid_reflows_and_keeps_occupied_rows():
+    board = Board(BoardFile())
+    board.update([session("a", 1), session("b", 2), session("c", 3)])
+    board.move("c", 5)
+    changes = board.set_grid(2, 2)
+    assert board.data.grid == Grid(columns=2, rows=3)  # cell 5 needs a third row
+    assert changes == [GridEvent(grid=Grid(columns=2, rows=3))]
+    board.move("c", 2)
+    board.set_grid(2, 2)
+    assert board.data.grid == Grid(columns=2, rows=2)
+    board.set_grid(4, 1)
+    assert board.data.grid == Grid(columns=4, rows=1)
+
+
+def test_moves_are_saved():
+    saved: list[BoardFile] = []
+    board = Board(BoardFile(), lambda d: saved.append(d.model_copy(deep=True)))
+    board.update([session("a", 1)])
+    board.move("a", 2)
+    assert saved[-1].tiles["a"].cell == 2

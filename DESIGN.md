@@ -42,6 +42,8 @@ Added to claude-control for the board (`DESIGN.md` there is the contract):
 - One tile per `session_id`. A session whose `replaces` names a session with a tile takes over that tile's cell and labels.
 - A tile shows the name, an optional description, the state decorator, `last_event_text`, the age (ticked by the page from `last_event_at`), and an activity indicator while a main-agent tool call is open.
 - Grid of fixed cells, columns × rows in `board.json`, default 3×2. A tile is dragged between cells and swaps with a tile already in the target cell. A new session takes the first free cell; when every cell is full the grid adds a row. The board never reorders tiles.
+- Resizing the grid keeps each tile's reading-order index, so tiles reflow when the column count changes; rows never drop below what the occupied cells need. The grid never shrinks by itself.
+- Drag uses `@dnd-kit/core` with an 8px activation distance, so a click still focuses; the click that ends a drag is ignored. The page moves the tile at once and resyncs from `/api/board` if the service refuses the move.
 - Pulse: about 3s when a tile enters `waiting` (any reason) or `error`, only when `state_since` is under 5s old, so reloading the page does not pulse every tile.
 - Acknowledge stores the tile's `state_since`; the tile is muted until `state_since` changes.
 - A hidden tile gives up its cell; unhiding puts it in the first free cell.

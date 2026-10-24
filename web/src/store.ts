@@ -43,9 +43,22 @@ export function applyEvent(board: BoardData, event: BoardEvent): BoardData {
   }
 }
 
+/** Puts a tile in `cell` ahead of the service, swapping as the service does. */
+export function moveTile(board: BoardData, sessionId: string, cell: number): BoardData {
+  const tile = board.tiles[sessionId]
+  if (!tile || tile.cell === null || tile.cell === cell) return board
+  const tiles = { ...board.tiles }
+  for (const [id, other] of Object.entries(tiles)) {
+    if (id !== sessionId && other.cell === cell) tiles[id] = { ...other, cell: tile.cell }
+  }
+  tiles[sessionId] = { ...tile, cell }
+  return { ...board, tiles }
+}
+
 interface BoardStore extends BoardData {
   connection: Connection
   apply: (event: BoardEvent) => void
+  moveLocal: (sessionId: string, cell: number) => void
   setConnection: (connection: Connection) => void
 }
 
@@ -53,5 +66,6 @@ export const useBoard = create<BoardStore>()((set) => ({
   ...initialBoard,
   connection: 'connecting',
   apply: (event) => set((state) => applyEvent(state, event)),
+  moveLocal: (sessionId, cell) => set((state) => moveTile(state, sessionId, cell)),
   setConnection: (connection) => set({ connection }),
 }))

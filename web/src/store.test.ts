@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyEvent, initialBoard } from './store'
+import { applyEvent, initialBoard, moveTile } from './store'
 import { makeTile } from './test/fixtures'
 
 describe('applyEvent', () => {
@@ -35,5 +35,36 @@ describe('applyEvent', () => {
     const down = applyEvent(loaded, { type: 'daemon', daemon: { connected: false, error: 'x' } })
     expect(down.daemon).toEqual({ connected: false, error: 'x' })
     expect(applyEvent(loaded, { type: 'heartbeat' })).toBe(loaded)
+  })
+})
+
+describe('moveTile', () => {
+  const board = applyEvent(initialBoard, {
+    type: 'snapshot',
+    board: {
+      grid: { columns: 3, rows: 2 },
+      tiles: [
+        makeTile({ session_id: 'a', cell: 0 }),
+        makeTile({ session_id: 'b', cell: 1 }),
+        makeTile({ session_id: 'h', cell: null, hidden: true }),
+      ],
+      daemon: { connected: true, error: null },
+    },
+  })
+
+  it('moves to an empty cell', () => {
+    const next = moveTile(board, 'a', 5)
+    expect([next.tiles.a.cell, next.tiles.b.cell]).toEqual([5, 1])
+  })
+
+  it('swaps with the tile already there', () => {
+    const next = moveTile(board, 'a', 1)
+    expect([next.tiles.a.cell, next.tiles.b.cell]).toEqual([1, 0])
+  })
+
+  it('leaves hidden, unknown and same-cell moves alone', () => {
+    expect(moveTile(board, 'h', 3)).toBe(board)
+    expect(moveTile(board, 'zz', 3)).toBe(board)
+    expect(moveTile(board, 'a', 0)).toBe(board)
   })
 })

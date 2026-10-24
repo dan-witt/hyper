@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { focusSession } from '../api/client'
 import type { Tile } from '../api/types'
+import { justDragged } from '../lib/dragGuard'
 import { displayName, formatAge, shouldPulse, stateLabel, subtitle, tone } from '../lib/tile'
 
 const TOAST_MS = 4_000
@@ -24,6 +25,7 @@ export function TileCard({ tile, now, stale }: Props) {
   }, [toast])
 
   const onClick = async () => {
+    if (justDragged()) return
     const result = await focusSession(tile.session_id)
     setToast(result.ok ? null : result.message)
   }

@@ -34,13 +34,13 @@ describe('Board', () => {
     const cells = screen.getByRole('main').querySelector('.grid')!.children
     expect(cells[0]).toHaveTextContent('alpha')
     expect(cells[4]).toHaveTextContent('beta')
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.queryByTestId('status-banner')).toBeNull()
   })
 
   it('reports an unreachable daemon and greys the tiles', () => {
     render(<Board />)
     load(false)
-    expect(screen.getByRole('status')).toHaveTextContent('claude-control unreachable (ConnectError: refused)')
+    expect(screen.getByTestId('status-banner')).toHaveTextContent('claude-control unreachable (ConnectError: refused)')
     for (const tile of screen.getAllByTestId('tile')) expect(tile).toHaveClass('tile-stale')
   })
 
@@ -48,6 +48,6 @@ describe('Board', () => {
     render(<Board />)
     load()
     act(() => useBoard.getState().setConnection('lost'))
-    expect(screen.getByRole('status')).toHaveTextContent('Board service unreachable')
+    expect(screen.getByTestId('status-banner')).toHaveTextContent('Board service unreachable')
   })
 })

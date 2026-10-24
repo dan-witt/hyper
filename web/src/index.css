@@ -160,6 +160,30 @@ body {
   font-size: min(4.2cqi, 9cqh);
 }
 
+.drag-handle {
+  height: 100%;
+  touch-action: none;
+}
+.drag-handle.dragging {
+  position: relative;
+  z-index: 20;
+  cursor: grabbing;
+  filter: drop-shadow(0 1.5rem 2rem rgb(0 0 0 / 0.6));
+}
+.drag-handle.dragging .tile {
+  cursor: grabbing;
+}
+.cell:has(> .drag-handle.dragging) {
+  border-radius: 3cqmin;
+  outline: max(2px, 0.3cqmin) dashed #273142;
+  outline-offset: calc(-1 * max(2px, 0.3cqmin));
+}
+.cell-over > .cell-empty,
+.cell-over > .drag-handle:not(.dragging) .tile {
+  outline: max(3px, 0.6cqmin) solid #e5e7eb;
+  outline-offset: max(3px, 0.6cqmin);
+}
+
 .cell-empty {
   height: 100%;
   border: max(2px, 0.3cqmin) dashed #273142;

@@ -312,3 +312,47 @@ async def test_serves_the_built_page(tmp_path):
         r = await http.get("/")
         assert r.status_code == 200 and "<title>hyper</title>" in r.text
         assert (await http.get("/api/board")).status_code == 200
+
+
+@pytest.mark.anyio
+async def test_move_and_resize_are_pushed_and_saved(service):
+    service.fake.add("a")
+    service.fake.add("b")
+    await until(service, lambda b: tile_ids(b) == ["a", "b"])
+    async with stream(service) as events, httpx2.AsyncClient() as http:
+        await next_event(events, "snapshot")
+        r = await http.post(
+            f"{service.url}/api/tiles/a/move", json={"cell": 1}, headers=service.origin
+        )
+        assert r.status_code == 204
+        moved = {}
+        while len(moved) < 2:
+            e = await next_event(events, "tile")
+            moved[e["tile"]["session_id"]] = e["tile"]["cell"]
+        assert moved == {"a": 1, "b": 0}
+
+        r = await http.post(
+            f"{service.url}/api/grid", json={"columns": 2, "rows": 1}, headers=service.origin
+        )
+        assert r.json() == {"columns": 2, "rows": 1}
+        assert (await next_event(events, "grid"))["grid"] == {"columns": 2, "rows": 1}
+    data = json.loads(service.cfg.board_path.read_text())
+    assert (data["tiles"]["a"]["cell"], data["grid"]) == (1, {"columns": 2, "rows": 1})
+
+
+@pytest.mark.anyio
+async def test_move_errors(service):
+    service.fake.add("a")
+    await until(service, lambda b: tile_ids(b) == ["a"])
+    async with httpx2.AsyncClient() as http:
+        url = f"{service.url}/api/tiles"
+        r = await http.post(f"{url}/zzz/move", json={"cell": 1}, headers=service.origin)
+        assert r.status_code == 404
+        r = await http.post(f"{url}/a/move", json={"cell": 99}, headers=service.origin)
+        assert (r.status_code, r.json()["detail"]) == (409, "cell 99 is outside the 3x2 grid")
+        r = await http.post(f"{url}/a/move", json={"cell": -1}, headers=service.origin)
+        assert r.status_code == 422
+        r = await http.post(
+            f"{service.url}/api/grid", json={"columns": 0, "rows": 1}, headers=service.origin
+        )
+        assert r.status_code == 422

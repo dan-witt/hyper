@@ -14,7 +14,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from .board import Board, BoardStore
+from .board import Board, BoardError, BoardStore, NoSuchTile
 from .config import Config
 from .daemon import POLL_S, Connect, DaemonError, DaemonLink, DaemonUnavailable
 from .hub import Hub
@@ -25,7 +25,10 @@ from .models import (
     DaemonSession,
     DaemonStatus,
     FocusResult,
+    Grid,
+    GridRequest,
     HeartbeatEvent,
+    MoveRequest,
     SnapshotEvent,
 )
 
@@ -133,6 +136,22 @@ def create_app(
         except DaemonError as e:
             raise HTTPException(409, str(e)) from e
         return FocusResult(session_id=result["session_id"], pane=result["pane"])
+
+    @app.post("/api/tiles/{session_id}/move", status_code=204)
+    def move(session_id: str, body: MoveRequest) -> None:
+        """Put the tile in a cell, swapping with the tile already there."""
+        try:
+            hub.publish(*board.move(session_id, body.cell))
+        except NoSuchTile as e:
+            raise HTTPException(404, f"no tile for session {session_id}") from e
+        except BoardError as e:
+            raise HTTPException(409, str(e)) from e
+
+    @app.post("/api/grid")
+    def set_grid(body: GridRequest) -> Grid:
+        """Resize the grid; returns the size applied (rows grow to fit occupied cells)."""
+        hub.publish(*board.set_grid(body.columns, body.rows))
+        return board.data.grid
 
     if extra_routes is not None:
         app.include_router(extra_routes)
