@@ -290,3 +290,54 @@ def test_remove_only_drops_ended_tiles_and_they_stay_gone():
     assert board.remove("a") == [TileRemovedEvent(session_id="a")]
     board.update([session("a", 1, state="ended"), session("b", 2)])
     assert list(board.data.tiles) == ["b"]
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_launched_session_takes_the_reserved_cell_and_others_skip_it():
+    clock = Clock()
+    board = Board(BoardFile(), clock=clock)
+    board.update([session("a", 1)])
+    board.launched("new", 4, "~/work")
+    assert board.data.last_launch_dir == "~/work"
+    board.update([session("a", 1), session("other", 2)])
+    assert cells(board)["other"] == 1
+    board.update([session("a", 1), session("other", 2), session("new", 3)])
+    assert cells(board)["new"] == 4
+    with pytest.raises(BoardError, match="cell 4 is taken"):
+        board.check_free(4)
+
+
+def test_reservation_expires_and_yields_to_a_taken_cell():
+    clock = Clock()
+    board = Board(BoardFile(), clock=clock)
+    board.launched("late", 3, "/w")
+    clock.now = 61
+    board.update([session("x", 1), session("late", 2)])
+    assert cells(board) == {"x": 0, "late": 1}
+
+    board.launched("blocked", 2, "/w")
+    board.update([session("x", 1), session("late", 2)])
+    board.move("x", 2)  # the user drags a tile into the held cell
+    board.update([session("x", 1), session("late", 2), session("blocked", 3)])
+    assert cells(board)["blocked"] == 0
+
+
+def test_launched_after_the_session_was_listed_moves_its_tile():
+    board = Board(BoardFile())
+    board.update([session("new", 1)])
+    assert cells(board) == {"new": 0}
+    [change] = board.launched("new", 5, "/w")
+    assert isinstance(change, TileEvent) and change.tile.cell == 5
+
+
+def test_check_free_rejects_cells_outside_the_grid():
+    board = Board(BoardFile())
+    with pytest.raises(BoardError, match="outside the 3x2 grid"):
+        board.check_free(6)

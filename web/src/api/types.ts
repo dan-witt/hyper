@@ -9,6 +9,8 @@ export type SessionState = Session['state']
 export type DaemonStatus = Schemas['DaemonStatus']
 export type BoardView = Schemas['BoardView']
 export type FocusResult = Schemas['FocusResult']
+export type LaunchRequest = Schemas['LaunchRequest']
+export type LaunchResult = Schemas['LaunchResult']
 
 // The SSE item schema is not read by openapi-typescript, so the union is spelled here.
 export type BoardEvent =

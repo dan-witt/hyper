@@ -48,6 +48,10 @@ interface EmptyProps {
 function EmptyItems({ cell, grid, hidden, onDialog }: EmptyProps) {
   return (
     <>
+      <ContextMenu.Item className="menu-item" onSelect={() => onDialog({ kind: 'launch', cell })}>
+        Launch a session…
+      </ContextMenu.Item>
+      <ContextMenu.Separator className="menu-separator" />
       <ContextMenu.Sub>
         <ContextMenu.SubTrigger className="menu-item" disabled={hidden.length === 0}>
           Show hidden ({hidden.length})<span className="menu-hint">›</span>

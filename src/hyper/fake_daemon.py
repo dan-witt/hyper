@@ -4,6 +4,7 @@ It serves the same tools and `sessions://` resource over sessions held in a dict
 """
 
 import json
+import os
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -25,6 +26,7 @@ class FakeDaemon:
         self.sessions: dict[str, dict[str, Any]] = {}
         self.focused: list[str] = []
         self.focus_error: str | None = None
+        self.launched: list[dict[str, Any]] = []
         self.bus = InMemorySubscriptionBus()
         self.server = self._build()
 
@@ -95,18 +97,26 @@ class FakeDaemon:
             return {"session_id": session_id, "pane": row["pane"], "client": "/dev/pts/0"}
 
         @mcp.tool()
-        def launch_session(
+        async def launch_session(
             cwd: str, prompt: str | None = None, name: str | None = None
         ) -> dict[str, Any]:
+            if not os.path.isdir(os.path.expanduser(cwd)):
+                raise ToolError(f"not a directory: {cwd}")
+            if name and any(
+                r["name"] == name and r["state"] != "ended" for r in self.sessions.values()
+            ):
+                raise ToolError(f"a live session is already named {name!r}")
+            self.launched.append({"cwd": cwd, "prompt": prompt, "name": name})
             session_id = str(uuid.uuid4())
             row = self.add(
                 session_id,
                 name=name or session_id[:8],
-                cwd=cwd,
+                cwd=os.path.expanduser(cwd),
                 state="starting",
                 last_event="launched",
                 last_event_text="launching",
             )
+            await self.notify()
             return {
                 "session_id": session_id,
                 "name": row["name"],

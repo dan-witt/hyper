@@ -1,4 +1,4 @@
-import type { BoardView, FocusResult, Grid } from './types'
+import type { BoardView, FocusResult, Grid, LaunchRequest, LaunchResult } from './types'
 
 /** `data` is the parsed response body, or null for a 204. */
 export type ActionResult<T = null> = { ok: true; data: T } | { ok: false; message: string }
@@ -73,11 +73,30 @@ export function setGrid(columns: number, rows: number): Promise<ActionResult<Gri
   return send<Grid>('POST', '/api/grid', { columns, rows })
 }
 
-export async function fetchBoard(): Promise<BoardView | null> {
+/** Start a session; its tile goes in `cell`. */
+export function launchSession(request: LaunchRequest): Promise<ActionResult<LaunchResult>> {
+  return send<LaunchResult>('POST', '/api/launch', request)
+}
+
+async function getJson<T>(path: string): Promise<T | null> {
   try {
-    const response = await fetch('/api/board')
-    return response.ok ? ((await response.json()) as BoardView) : null
+    const response = await fetch(path)
+    return response.ok ? ((await response.json()) as T) : null
   } catch {
     return null
   }
+}
+
+/** The directory last launched in, or `~/`. */
+export async function launchDirectory(): Promise<string> {
+  return (await getJson<{ cwd: string }>('/api/launch'))?.cwd ?? '~/'
+}
+
+/** Directories completing the last component of `path`. */
+export async function completeDirectory(path: string): Promise<string[]> {
+  return (await getJson<{ dirs: string[] }>(`/api/dirs?${new URLSearchParams({ path })}`))?.dirs ?? []
+}
+
+export function fetchBoard(): Promise<BoardView | null> {
+  return getJson<BoardView>('/api/board')
 }

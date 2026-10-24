@@ -18,7 +18,7 @@ Page (`web/`, pnpm via corepack):
 
 - Checks: `pnpm lint`, `pnpm test` (Vitest), `pnpm build` (type-checks tests too), `pnpm e2e` (Playwright, system Chrome via `channel: 'chrome'`; it builds the page and starts `hyper serve --fake` on port 7791 itself), `pnpm check:api` (fails when `src/api/schema.ts` is stale against the service's models; regenerate with `pnpm gen:api`).
 - `hyper serve --fake` runs the board over an in-process fake daemon with demo sessions; `/api/fake/*` (only in that mode) changes them.
-- Page work with hot reload: `uv run hyper serve --fake --dev-origin http://localhost:5173` and `pnpm dev`; Vite proxies `/api` to port 7780.
+- Page work with hot reload: `uv run hyper serve --fake --dev` (or `--dev` alone for the live daemon) and `pnpm dev`; Vite proxies `/api` to port 7780. `--dev` against the live daemon makes launch a dry run; `--live-launch` starts real sessions in the `claude` tmux session, so leave it off unless that is the point.
 - Tile sizes come from CSS container queries on each grid cell (`cqi`/`cqh` in `index.css`), so check a change at 1920x1080 and 3840x2160.
 
 ## Constraints that are easy to break

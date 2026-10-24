@@ -1,54 +1,9 @@
-import { Dialog } from 'radix-ui'
-import { type FormEvent, type ReactNode, useState } from 'react'
+import { useState } from 'react'
 import { editTile } from '../api/client'
 import type { Grid, Tile } from '../api/types'
 import { applyGrid, type DialogRequest } from '../lib/actions'
-
-interface FrameProps {
-  title: string
-  hint: string
-  error: string | null
-  busy: boolean
-  onSubmit: () => void
-  onClose: () => void
-  children: ReactNode
-}
-
-function Frame({ title, hint, error, busy, onSubmit, onClose, children }: FrameProps) {
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    onSubmit()
-  }
-  return (
-    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog" data-testid="dialog">
-          <form onSubmit={submit} className="flex flex-col gap-4">
-            <Dialog.Title className="dialog-title">{title}</Dialog.Title>
-            <Dialog.Description className="dialog-hint">{hint}</Dialog.Description>
-            {children}
-            {error && (
-              <p role="alert" className="dialog-error">
-                {error}
-              </p>
-            )}
-            <div className="flex justify-end gap-3">
-              <Dialog.Close asChild>
-                <button type="button" className="button">
-                  Cancel
-                </button>
-              </Dialog.Close>
-              <button type="submit" className="button button-primary" disabled={busy}>
-                Save
-              </button>
-            </div>
-          </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  )
-}
+import { Frame } from './DialogFrame'
+import { LaunchDialog } from './LaunchDialog'
 
 const TEXT_FIELDS = {
   label: { title: 'Rename tile', hint: 'Shown on the board only. Leave empty to use the session name.', max: 60 },
@@ -138,5 +93,6 @@ function GridDialog({ grid, onClose }: { grid: Grid; onClose: () => void }) {
 
 export function BoardDialog({ request, grid, onClose }: { request: DialogRequest; grid: Grid; onClose: () => void }) {
   if (request.kind === 'grid') return <GridDialog grid={grid} onClose={onClose} />
+  if (request.kind === 'launch') return <LaunchDialog cell={request.cell} onClose={onClose} />
   return <TextDialog key={request.tile.session_id} field={request.kind} tile={request.tile} onClose={onClose} />
 }

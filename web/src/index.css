@@ -323,3 +323,33 @@ body {
 .button:disabled {
   opacity: 0.5;
 }
+.suggestions {
+  position: absolute;
+  top: calc(100% + 0.25em);
+  right: 0;
+  left: 0;
+  z-index: 1;
+  max-height: 14em;
+  overflow-y: auto;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  background: var(--color-panel);
+  padding: 0.25em;
+  box-shadow: 0 1rem 2rem rgb(0 0 0 / 0.6);
+}
+.suggestion {
+  border-radius: 0.35rem;
+  padding: 0.3em 0.6em;
+  cursor: default;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+}
+.suggestion:hover,
+.suggestion[aria-selected='true'] {
+  background: #273142;
+}
+textarea.field {
+  min-height: 6em;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+}

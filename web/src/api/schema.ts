@@ -165,6 +165,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/launch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Launch Defaults
+         * @description Defaults for the launch dialog: the directory last launched in.
+         */
+        get: operations["launch_defaults_api_launch_get"];
+        put?: never;
+        /**
+         * Launch
+         * @description Start a Claude Code session in tmux; its tile goes in `cell`. The board does not
+         *     focus it.
+         */
+        post: operations["launch_api_launch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dirs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Complete Dirs
+         * @description Directories completing the last component of `path`.
+         */
+        get: operations["complete_dirs_api_dirs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/grid": {
         parameters: {
             query?: never;
@@ -269,6 +314,11 @@ export interface components {
             /** Error */
             error: string | null;
         };
+        /** DirCompletions */
+        DirCompletions: {
+            /** Dirs */
+            dirs: string[];
+        };
         /** FocusResult */
         FocusResult: {
             /** Session Id */
@@ -317,6 +367,31 @@ export interface components {
              * @enum {string}
              */
             type: "heartbeat";
+        };
+        /** LaunchDefaults */
+        LaunchDefaults: {
+            /** Cwd */
+            cwd: string;
+        };
+        /** LaunchRequest */
+        LaunchRequest: {
+            /** Cwd */
+            cwd: string;
+            /** Name */
+            name?: string | null;
+            /** Prompt */
+            prompt?: string | null;
+            /** Cell */
+            cell?: number | null;
+        };
+        /** LaunchResult */
+        LaunchResult: {
+            /** Session Id */
+            session_id: string | null;
+            /** Name */
+            name: string | null;
+            /** Dry Run */
+            dry_run: boolean;
         };
         /** MoveRequest */
         MoveRequest: {
@@ -649,6 +724,90 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    launch_defaults_api_launch_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchDefaults"];
+                };
+            };
+        };
+    };
+    launch_api_launch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LaunchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_dirs_api_dirs_get: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirCompletions"];
+                };
             };
             /** @description Validation Error */
             422: {

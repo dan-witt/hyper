@@ -14,6 +14,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from . import dirs
 from .board import Board, BoardError, BoardStore, NoSuchTile
 from .config import Config
 from .daemon import POLL_S, Connect, DaemonError, DaemonLink, DaemonUnavailable
@@ -25,10 +26,14 @@ from .models import (
     DaemonEvent,
     DaemonSession,
     DaemonStatus,
+    DirCompletions,
     FocusResult,
     Grid,
     GridRequest,
     HeartbeatEvent,
+    LaunchDefaults,
+    LaunchRequest,
+    LaunchResult,
     MoveRequest,
     ShowRequest,
     SnapshotEvent,
@@ -77,7 +82,10 @@ def create_app(
     heartbeat_s: float = HEARTBEAT_S,
     web_dist: Path | None = WEB_DIST,
     extra_routes: APIRouter | None = None,
+    dry_run_launch: bool = False,
 ) -> FastAPI:
+    """`dry_run_launch` answers launch requests without calling the daemon, so a dev
+    service reading the live daemon does not start real sessions."""
     store = store or BoardStore(cfg.board_path)
     board = Board(store.load(), store.save)
     hub = Hub()
@@ -178,6 +186,43 @@ def create_app(
     def remove(session_id: str) -> None:
         """Remove an ended session's tile."""
         tile_action(session_id, lambda: board.remove(session_id))
+
+    @app.get("/api/launch")
+    def launch_defaults() -> LaunchDefaults:
+        """Defaults for the launch dialog: the directory last launched in."""
+        return LaunchDefaults(cwd=board.data.last_launch_dir or "~/")
+
+    @app.get("/api/dirs")
+    def complete_dirs(path: str = "") -> DirCompletions:
+        """Directories completing the last component of `path`."""
+        return DirCompletions(dirs=dirs.complete(path))
+
+    @app.post("/api/launch")
+    async def launch(body: LaunchRequest) -> LaunchResult:
+        """Start a Claude Code session in tmux; its tile goes in `cell`. The board does not
+        focus it."""
+        if body.cell is not None:
+            try:
+                board.check_free(body.cell)
+            except BoardError as e:
+                raise HTTPException(409, str(e)) from e
+        if dry_run_launch:
+            log.info("dry run, not launched: %s", body.model_dump_json(exclude={"prompt"}))
+            result = LaunchResult(session_id=None, name=body.name, dry_run=True)
+        else:
+            args = body.model_dump(include={"cwd", "name", "prompt"}, exclude_none=True)
+            try:
+                started = await link.call("launch_session", **args)
+            except DaemonUnavailable as e:
+                raise HTTPException(503, str(e)) from e
+            except DaemonError as e:
+                raise HTTPException(409, str(e)) from e
+            result = LaunchResult(
+                session_id=started["session_id"], name=started.get("name"), dry_run=False
+            )
+        hub.publish(*board.launched(result.session_id, body.cell, body.cwd))
+        link.wake()
+        return result
 
     @app.post("/api/grid")
     def set_grid(body: GridRequest) -> Grid:

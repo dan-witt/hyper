@@ -418,3 +418,99 @@ async def test_tile_action_errors(service):
         assert r.status_code == 409
         r = await http.request("DELETE", f"{url}/a", headers=service.origin)
         assert r.status_code == 415  # the request checks cover every unsafe method
+
+
+async def post(svc: Service, path: str, body: dict[str, Any]) -> httpx2.Response:
+    async with httpx2.AsyncClient() as http:
+        return await http.post(f"{svc.url}{path}", json=body, headers=svc.origin)
+
+
+@pytest.mark.anyio
+async def test_launch_puts_the_tile_in_the_cell_and_remembers_the_directory(service, tmp_path):
+    service.fake.add("a")
+    await until(service, lambda b: tile_ids(b) == ["a"])
+    async with httpx2.AsyncClient() as http:
+        r = await http.get(f"{service.url}/api/launch")
+        assert r.json() == {"cwd": "~/"}
+
+    r = await post(
+        service,
+        "/api/launch",
+        {"cwd": str(tmp_path), "name": "e2e", "prompt": "line one\nline two", "cell": 4},
+    )
+    assert r.status_code == 200
+    result = r.json()
+    assert (result["name"], result["dry_run"]) == ("e2e", False)
+    assert service.fake.launched == [
+        {"cwd": str(tmp_path), "prompt": "line one\nline two", "name": "e2e"}
+    ]
+    b = await until(service, lambda b: result["session_id"] in tile_ids(b))
+    [tile] = [t for t in b["tiles"] if t["session_id"] == result["session_id"]]
+    assert (tile["cell"], tile["session"]["state"]) == (4, "starting")
+    assert service.fake.focused == []
+
+    async with httpx2.AsyncClient() as http:
+        r = await http.get(f"{service.url}/api/launch")
+        assert r.json() == {"cwd": str(tmp_path)}
+
+
+@pytest.mark.anyio
+async def test_launch_errors(service, tmp_path):
+    service.fake.add("a")
+    await until(service, lambda b: tile_ids(b) == ["a"])
+    r = await post(service, "/api/launch", {"cwd": str(tmp_path), "cell": 0})
+    assert (r.status_code, r.json()["detail"]) == (409, "cell 0 is taken")
+    r = await post(service, "/api/launch", {"cwd": str(tmp_path / "missing")})
+    assert (r.status_code, r.json()["detail"]) == (409, f"not a directory: {tmp_path}/missing")
+    r = await post(service, "/api/launch", {"cwd": ""})
+    assert r.status_code == 422
+    assert service.fake.launched == []
+
+
+@pytest.mark.anyio
+async def test_launch_from_another_origin_is_refused(service, tmp_path):
+    async with httpx2.AsyncClient() as http:
+        r = await http.post(
+            f"{service.url}/api/launch",
+            json={"cwd": str(tmp_path)},
+            headers={"origin": "https://evil.example"},
+        )
+        assert r.status_code == 403
+        r = await http.post(
+            f"{service.url}/api/launch",
+            content=json.dumps({"cwd": str(tmp_path)}),
+            headers={**service.origin, "content-type": "text/plain"},
+        )
+        assert r.status_code == 415
+    assert service.fake.launched == []
+
+
+@pytest.mark.anyio
+async def test_dry_run_launch_does_not_call_the_daemon(tmp_path):
+    fake = FakeDaemon()
+    cfg = Config(state_dir=tmp_path)
+
+    @contextlib.asynccontextmanager
+    async def connect() -> AsyncIterator[Client]:
+        async with Client(fake.server) as client:
+            yield client
+
+    app = create_app(cfg, connect, web_dist=None, dry_run_launch=True)
+    transport = httpx2.ASGITransport(app=app)
+    async with httpx2.AsyncClient(transport=transport, base_url="http://127.0.0.1") as http:
+        r = await http.post(
+            "/api/launch",
+            json={"cwd": "/work", "name": "x"},
+            headers={"origin": f"http://127.0.0.1:{cfg.port}"},
+        )
+        assert r.json() == {"session_id": None, "name": "x", "dry_run": True}
+        assert (await http.get("/api/launch")).json() == {"cwd": "/work"}
+    assert fake.launched == []
+
+
+@pytest.mark.anyio
+async def test_dirs_endpoint(service, tmp_path):
+    (tmp_path / "project").mkdir()
+    async with httpx2.AsyncClient() as http:
+        r = await http.get(f"{service.url}/api/dirs", params={"path": f"{tmp_path}/pro"})
+    assert r.json() == {"dirs": [f"{tmp_path}/project/"]}

@@ -34,7 +34,7 @@ Added to claude-control for the board (`DESIGN.md` there is the contract):
 - The MCP HTTP client has no read timeout, because the `subscriptions/listen` stream is silent while nothing changes (httpx2's default 5s read timeout dropped it every few seconds). Each tool call has its own 10s timeout instead, so a hung daemon still counts as disconnected.
 - The listing asks for every state, ended included, so ended sessions keep their Offline tiles.
 - API types: pydantic models produce the OpenAPI schema, SSE payloads included; `openapi-typescript` generates the page's types from it. A check fails when the generated types are stale.
-- Request checks on every POST: a localhost `Host`, an `Origin` equal to the board's own, and `Content-Type: application/json`. The JSON requirement forces a CORS preflight, which the service never grants, so another web page cannot trigger an action such as launch.
+- Request checks on every POST, PATCH and DELETE: a localhost `Host`, an `Origin` equal to the board's own, and `Content-Type: application/json`. The JSON requirement forces a CORS preflight, which the service never grants, so another web page cannot trigger an action such as launch.
 - Config: `$XDG_CONFIG_HOME/hyper/config.toml` (port, daemon URL, token path). UI state: `$XDG_STATE_HOME/hyper/board.json`, written only by the service.
 
 ## Tiles
@@ -59,7 +59,9 @@ Added to claude-control for the board (`DESIGN.md` there is the contract):
 | Right-click a tile | Acknowledge, rename (board label), edit description, hide, copy project path, remove (ended tiles) |
 | Right-click an empty cell | Launch a session into that cell; "Show hidden (n)"; grid size (presets and a custom columns × rows dialog) |
 
-The launch dialog has a directory field with completion served by the board service (default: the last directory launched in), an optional name and a multi-line prompt; `Ctrl+Enter` launches. The board does not focus the new session.
+The launch dialog has a directory field with completion served by the board service (default: the last directory launched in, kept in `board.json`), an optional name and a multi-line prompt; `Ctrl+Enter` launches, and Enter in a field never does. Tab completes the common prefix of the suggestions, or moves on when there is nothing longer; arrows and Enter pick one. A launch error stays in the dialog. The board does not focus the new session.
+
+The launched session's tile goes in the cell that was right-clicked. The service holds that cell for the returned `session_id` for 60s, since a listing fetched before the launch returned can arrive after it; other new sessions skip a held cell. If the daemon lists the session before the launch call returns, its tile is moved to the cell. A held cell that has since been taken yields the first free cell.
 
 Rename, description, acknowledge and hide are board state; they never change the session. A blank label or description clears it, and the tile falls back to the session name or project path.
 
@@ -76,7 +78,7 @@ Rename, description, acknowledge and hide are board state; they never change the
 - Service: pytest against a fake MCP daemon that serves the same tools and resource.
 - Page: Vitest + Testing Library for components and store logic.
 - End to end: Playwright against the service wired to the fake daemon.
-- Dev reads the live daemon; launch goes to the fake daemon unless a flag says otherwise.
+- `hyper serve --dev` reads the live daemon, allows the Vite dev server's origin, and answers launch requests as a dry run without calling the daemon; `--live-launch` sends them. `hyper serve --fake` launches into the fake daemon, so the tile appears.
 
 ## Steps
 

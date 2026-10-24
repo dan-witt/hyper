@@ -96,6 +96,11 @@ class DaemonLink:
         self.retry_s = retry_s
         self.client: Client | None = None
         self.status = DaemonStatus(connected=False, error="connecting")
+        self._wake = asyncio.Event()
+
+    def wake(self) -> None:
+        """Fetch a listing now rather than at the next poll."""
+        self._wake.set()
 
     def _set_status(self, status: DaemonStatus) -> None:
         if status != self.status:
@@ -120,7 +125,7 @@ class DaemonLink:
                 await asyncio.sleep(self.retry_s)
 
     async def _serve(self, client: Client, sub: Any) -> None:
-        wake = asyncio.Event()
+        wake = self._wake
 
         async def forward() -> None:
             async for _ in sub:

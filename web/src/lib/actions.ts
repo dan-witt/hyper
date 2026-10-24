@@ -2,7 +2,10 @@ import { type ActionResult, setGrid } from '../api/client'
 import type { Grid, Tile } from '../api/types'
 import { useBoard } from '../store'
 
-export type DialogRequest = { kind: 'label' | 'description'; tile: Tile } | { kind: 'grid' }
+export type DialogRequest =
+  | { kind: 'label' | 'description'; tile: Tile }
+  | { kind: 'grid' }
+  | { kind: 'launch'; cell: number }
 
 export const GRID_PRESETS: readonly (readonly [number, number])[] = [
   [2, 2],

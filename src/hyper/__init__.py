@@ -5,6 +5,8 @@ import json
 import logging
 from pathlib import Path
 
+VITE_ORIGIN = "http://localhost:5173"
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="hyper")
@@ -18,6 +20,17 @@ def main() -> None:
         action="append",
         default=[],
         help="another origin allowed to POST, such as the Vite dev server (repeatable)",
+    )
+    serve.add_argument(
+        "--dev",
+        action="store_true",
+        help=f"page development: allow the Vite dev server ({VITE_ORIGIN}) and answer launch "
+        "requests without starting a session (see --live-launch)",
+    )
+    serve.add_argument(
+        "--live-launch",
+        action="store_true",
+        help="with --dev, send launch requests to claude-control",
     )
     serve.add_argument(
         "--fake",
@@ -42,13 +55,16 @@ def main() -> None:
     if args.state_dir:
         cfg.state_dir = args.state_dir
     cfg.dev_origins += args.dev_origin
+    if args.dev:
+        cfg.dev_origins.append(VITE_ORIGIN)
     if args.fake:
         from . import dev
 
         fake = dev.seeded_fake()
         app = create_app(cfg, dev.connect(fake), extra_routes=dev.fake_routes(fake))
     else:
-        app = create_app(cfg, http_connect(cfg.daemon_url, cfg.token))
+        dry_run = args.dev and not args.live_launch
+        app = create_app(cfg, http_connect(cfg.daemon_url, cfg.token), dry_run_launch=dry_run)
 
     import uvicorn
 

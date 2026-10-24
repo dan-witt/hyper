@@ -57,6 +57,7 @@ class BoardFile(Model):
     version: Literal[1] = 1
     grid: Grid = Field(default_factory=Grid)
     tiles: dict[str, StoredTile] = Field(default_factory=dict)  # by session_id
+    last_launch_dir: str | None = None
 
 
 # --- what the page sees
@@ -140,6 +141,27 @@ class TileEdit(Model):
 
 class ShowRequest(Model):
     cell: int | None = Field(default=None, ge=0)
+
+
+class LaunchRequest(Model):
+    cwd: str = Field(min_length=1, max_length=4096)
+    name: Label = None
+    prompt: Annotated[str | None, Field(max_length=100_000), AfterValidator(_blank_is_none)] = None
+    cell: int | None = Field(default=None, ge=0)  # where the tile goes; None for the first free
+
+
+class LaunchResult(Model):
+    session_id: str | None  # None on a dry run
+    name: str | None
+    dry_run: bool
+
+
+class LaunchDefaults(Model):
+    cwd: str
+
+
+class DirCompletions(Model):
+    dirs: list[str]
 
 
 class GridRequest(Model):

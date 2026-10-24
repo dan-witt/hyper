@@ -210,3 +210,37 @@ test('copy the project path; remove an ended tile', async ({ page, context, requ
   await expect(tile(page, 'e2e-end')).toHaveCount(0)
   await fake(request, '/sessions/e2e-end/remove')
 })
+
+test('launch from an empty cell puts the new tile there without focusing it', async ({ page, request }) => {
+  await page.goto('/')
+  await expect(tile(page, 'billing')).toBeVisible()
+  const focusedBefore = ((await (await request.get('/api/fake/focused')).json()) as string[]).length
+  const { cell, index } = await lastEmptyCell(page)
+  await (await openMenu(page, cell)).getByRole('menuitem', { name: 'Launch a session…' }).click()
+
+  const dir = page.getByRole('combobox', { name: 'Directory' })
+  await expect(dir).toBeFocused()
+  await dir.fill('/does-not-exist')
+  await page.getByRole('button', { name: 'Launch' }).click()
+  await expect(page.getByTestId('dialog').getByRole('alert')).toHaveText('not a directory: /does-not-exist')
+
+  await dir.fill('/us')
+  await page.getByRole('option', { name: '/usr/' }).waitFor()
+  await dir.press('Tab')
+  await expect(dir).toHaveValue('/usr/')
+  await page.getByRole('textbox', { name: 'Name' }).fill('e2e-launch')
+  await page.getByRole('textbox', { name: 'Prompt' }).fill('first line\nsecond line')
+  await page.keyboard.press('Control+Enter')
+  await expect(page.getByTestId('dialog')).toHaveCount(0)
+
+  const launched = page.locator(`[data-cell="${index}"]`).getByTestId('tile')
+  await expect(launched).toContainText('e2e-launch')
+  await expect(launched).toHaveAttribute('data-tone', 'start')
+  const focusedAfter = ((await (await request.get('/api/fake/focused')).json()) as string[]).length
+  expect(focusedAfter).toBe(focusedBefore)
+
+  await (await openMenu(page, (await lastEmptyCell(page)).cell)).getByRole('menuitem', { name: 'Launch a session…' }).click()
+  await expect(page.getByRole('combobox', { name: 'Directory' })).toHaveValue('/usr/')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('dialog')).toHaveCount(0)
+})

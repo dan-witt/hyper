@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
@@ -22,6 +23,9 @@ from .models import (
 
 log = logging.getLogger(__name__)
 
+# How long a launch holds its cell for a session the daemon has not listed yet.
+RESERVE_S = 60.0
+
 
 class NoSuchTile(Exception):
     pass
@@ -38,10 +42,18 @@ class Board:
     that session. Every mutation returns the changes to push to pages.
     """
 
-    def __init__(self, data: BoardFile, save: Callable[[BoardFile], None] = lambda _: None):
+    def __init__(
+        self,
+        data: BoardFile,
+        save: Callable[[BoardFile], None] = lambda _: None,
+        clock: Callable[[], float] = time.monotonic,
+    ):
         self.data = data
         self.sessions: dict[str, DaemonSession] = {}
         self._save = save
+        self._clock = clock
+        # Cells promised to launched sessions, by session_id: (cell, deadline).
+        self._reserved: dict[str, tuple[int, float]] = {}
 
     def tiles(self) -> list[Tile]:
         return [t for t in (self._tile(sid) for sid in self.data.tiles) if t is not None]
@@ -108,9 +120,13 @@ class Board:
             elif old not in listed or listed[old].state == "ended":
                 # Resumed into a session that already has its own tile.
                 del tiles[old]
+        now = self._clock()
+        self._reserved = {sid: r for sid, r in self._reserved.items() if r[1] > now}
         for s in ordered:
             if s.session_id not in tiles and s.state != "ended":
-                tiles[s.session_id] = StoredTile(cell=self._free_cell())
+                reserved = self._reserved.pop(s.session_id, None)
+                cell = reserved[0] if reserved and self._is_free(reserved[0]) else None
+                tiles[s.session_id] = StoredTile(cell=self._free_cell() if cell is None else cell)
         for sid in [sid for sid in tiles if sid not in listed and sid not in unparsed]:
             del tiles[sid]  # the daemon forgot it
         for sid, t in tiles.items():
@@ -118,6 +134,41 @@ class Board:
             if s is not None and t.acked_state_since not in (None, s.state_since):
                 t.acked_state_since = None
         self.sessions = listed
+
+    def check_free(self, cell: int) -> None:
+        """Raise BoardError unless `cell` is in the grid and nothing holds it."""
+        grid = self.data.grid
+        if not 0 <= cell < grid.columns * grid.rows:
+            raise BoardError(f"cell {cell} is outside the {grid.columns}x{grid.rows} grid")
+        if not self._is_free(cell):
+            raise BoardError(f"cell {cell} is taken")
+
+    def _is_free(self, cell: int) -> bool:
+        grid = self.data.grid
+        return (
+            cell < grid.columns * grid.rows
+            and all(t.cell != cell for t in self.data.tiles.values())
+            and all(r[0] != cell for r in self._reserved.values())
+        )
+
+    def launched(self, session_id: str | None, cell: int | None, cwd: str) -> list[Change]:
+        """Record a launch: remember the directory and hold `cell` for the new session's tile.
+
+        The daemon may list the session before the launch call returns, so a tile that
+        already exists is moved to `cell` instead.
+        """
+
+        def apply() -> None:
+            self.data.last_launch_dir = cwd
+            if session_id is None or cell is None:
+                return
+            stored = self.data.tiles.get(session_id)
+            if stored is None:
+                self._reserved[session_id] = (cell, self._clock() + RESERVE_S)
+            elif stored.cell != cell and self._is_free(cell):
+                stored.cell = cell
+
+        return self._mutate(apply)
 
     def _shown(self, session_id: str) -> StoredTile:
         stored = self.data.tiles.get(session_id)
@@ -182,11 +233,7 @@ class Board:
         if not stored.hidden:
             raise BoardError("the tile is not hidden")
         if cell is not None:
-            grid = self.data.grid
-            if not 0 <= cell < grid.columns * grid.rows:
-                raise BoardError(f"cell {cell} is outside the {grid.columns}x{grid.rows} grid")
-            if any(t.cell == cell for t in self.data.tiles.values()):
-                raise BoardError(f"cell {cell} is taken")
+            self.check_free(cell)
 
         def apply() -> None:
             stored.hidden = False
@@ -219,6 +266,7 @@ class Board:
     def _free_cell(self) -> int:
         grid = self.data.grid
         taken = {t.cell for t in self.data.tiles.values() if t.cell is not None}
+        taken |= {r[0] for r in self._reserved.values()}
         for cell in range(grid.columns * grid.rows):
             if cell not in taken:
                 return cell

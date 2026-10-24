@@ -36,6 +36,9 @@ Board layout and labels are kept in `~/.local/state/hyper/board.json`.
 | `POST /api/tiles/{id}/hide` | Take the tile off the grid |
 | `POST /api/tiles/{id}/show` `{"cell": n \| null}` | Put a hidden tile in an empty cell, or the first free one |
 | `DELETE /api/tiles/{id}` | Remove an ended session's tile |
+| `GET /api/launch` | Launch dialog defaults: `{"cwd": <last directory launched in, or "~/">}` |
+| `GET /api/dirs?path=p` | Directories completing the last component of `p` (absolute or `~`), each ending in `/` |
+| `POST /api/launch` `{"cwd", "name"?, "prompt"?, "cell"?}` | Start a session through claude-control; its tile goes in `cell`. 409 with the daemon's message on failure |
 | `POST /api/grid` `{"columns": c, "rows": r}` | Resize the grid; returns the size applied (rows grow to fit occupied cells) |
 
 POST, PATCH and DELETE requests need an `Origin` of the board itself (or a configured dev origin) and `Content-Type: application/json`.
@@ -55,7 +58,7 @@ uv run pyright
 cd web && pnpm lint && pnpm test && pnpm e2e && pnpm check:api
 ```
 
-`uv run hyper serve --fake` runs the board over demo sessions instead of claude-control.
+`uv run hyper serve --fake` runs the board over demo sessions instead of claude-control. `uv run hyper serve --dev` reads claude-control, allows the Vite dev server (`pnpm dev` in `web/`) and turns launches into a dry run; add `--live-launch` to start real sessions.
 
 ## License
 
