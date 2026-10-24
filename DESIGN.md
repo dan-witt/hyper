@@ -1,0 +1,86 @@
+# hyper design
+
+Ticket: [ECH-18](https://linear.app/echowire/issue/ECH-18). Decided 2026-10-24.
+
+hyper is the status board for the Claude Code sessions that [claude-control](https://github.com/dan-witt/claude-control) tracks: a full-screen web page with one tile per session in fixed grid cells. Click a tile to focus the session's tmux pane; right-click an empty cell to launch a session. It is the Dashboard component of the [Agent Status Board design](https://claude.ai/artifact/95onJgMf4EDciR5mD3wUjn), section "Board UI, iteration 1".
+
+## Scope
+
+In (iteration 1): live tiles, focus, grid layout with drag, acknowledge, labels, hide, launch.
+Out: calendar, tasks, voice, "why" summaries, a detail panel, renaming the Claude Code session itself.
+
+## Components
+
+- **claude-control** (the daemon) stays pure MCP. hyper never reads its `/sessions` endpoint or its database.
+- **Board service** (`src/hyper/`): a Python process that is an MCP client of the daemon and serves the page and its API. It holds the daemon's bearer token; the browser never speaks MCP and never sees the token.
+- **Page** (`web/`): a React app that receives session diffs over SSE and sends actions to the board service.
+
+## Daemon fields
+
+Added to claude-control for the board (`DESIGN.md` there is the contract):
+
+| Field | Meaning |
+| --- | --- |
+| `state_since` | When the session entered its current state; resets when the state or the reason changes |
+| `last_event_at` | Timestamp of the last event |
+| `last_event_text` | The last event in words (previously the TUI's `describe()`) |
+| `replaces` | The session id this session replaced through `/clear` or `/resume` on the same process |
+
+## Board service
+
+- Python 3.12 with uv; FastAPI + uvicorn; the `mcp` 2.x client.
+- Listens on `127.0.0.1:7780`; runs as a systemd user unit.
+- Subscribes to `sessions://` and also polls `list_sessions` every 2s, because tool activity and last-event text change without a notification. It diffs each result against the previous one and pushes per-session changes to the page over SSE, with a heartbeat so the page can tell a dead service from a dead daemon.
+- The MCP HTTP client has no read timeout, because the `subscriptions/listen` stream is silent while nothing changes (httpx2's default 5s read timeout dropped it every few seconds). Each tool call has its own 10s timeout instead, so a hung daemon still counts as disconnected.
+- The listing asks for every state, ended included, so ended sessions keep their Offline tiles.
+- API types: pydantic models produce the OpenAPI schema, SSE payloads included; `openapi-typescript` generates the page's types from it. A check fails when the generated types are stale.
+- Request checks on every POST: a localhost `Host`, an `Origin` equal to the board's own, and `Content-Type: application/json`. The JSON requirement forces a CORS preflight, which the service never grants, so another web page cannot trigger an action such as launch.
+- Config: `$XDG_CONFIG_HOME/hyper/config.toml` (port, daemon URL, token path). UI state: `$XDG_STATE_HOME/hyper/board.json`, written only by the service.
+
+## Tiles
+
+- One tile per `session_id`. A session whose `replaces` names a session with a tile takes over that tile's cell and labels.
+- A tile shows the name, an optional description, the state decorator, `last_event_text`, the age (ticked by the page from `last_event_at`), and an activity indicator while a main-agent tool call is open.
+- Grid of fixed cells, columns × rows in `board.json`, default 3×2. A tile is dragged between cells and swaps with a tile already in the target cell. A new session takes the first free cell; when every cell is full the grid adds a row. The board never reorders tiles.
+- Pulse: about 3s when a tile enters `waiting` (any reason) or `error`, only when `state_since` is under 5s old, so reloading the page does not pulse every tile.
+- Acknowledge stores the tile's `state_since`; the tile is muted until `state_since` changes.
+- A hidden tile gives up its cell; unhiding puts it in the first free cell.
+- An ended session that was not replaced keeps a hollow Offline tile until it is removed, or until the daemon forgets the session (24h).
+- `--bg` sessions and sessions outside tmux get tiles; a failed focus shows the daemon's error as a toast.
+- Daemon unreachable: a banner, tiles greyed with their last state, automatic reconnect.
+
+## Interaction
+
+| Gesture | Action |
+| --- | --- |
+| Click a tile | `focus_session` |
+| Right-click a tile | Acknowledge, rename (board label), edit description, hide, copy project path, remove (ended tiles) |
+| Right-click an empty cell | Launch a session into that cell; "Show hidden (n)" |
+
+The launch dialog has a directory field with completion served by the board service (default: the last directory launched in), an optional name and a multi-line prompt; `Ctrl+Enter` launches. The board does not focus the new session.
+
+Rename, description, acknowledge and hide are board state; they never change the session.
+
+## Page
+
+- React 19, TypeScript, Vite, pnpm. dnd-kit for drag, Radix primitives for the context menu and dialog, Tailwind v4, a Zustand store fed by SSE.
+- Dark only. Readable from the side of the desk: large type, state shown as a thick coloured left edge plus a tinted background.
+- Shown as a full-screen app window on DP-2; 2 columns when it gets half a monitor.
+- Dev: the Vite dev server proxies `/api` to the service. Production: the service serves the built `web/dist`.
+
+## Testing and dev
+
+- Service: pytest against a fake MCP daemon that serves the same tools and resource.
+- Page: Vitest + Testing Library for components and store logic.
+- End to end: Playwright against the service wired to the fake daemon.
+- Dev reads the live daemon; launch goes to the fake daemon unless a flag says otherwise.
+
+## Steps
+
+1. claude-control: the four daemon fields; the TUI uses `last_event_text`.
+2. Board service: MCP client, diffing, SSE, `board.json`, fake daemon, tests.
+3. Page: live tiles, state colours, pulse, click to focus.
+4. Grid: cells, drag, persistence, columns × rows.
+5. Context menu: acknowledge, description, rename, hide and show hidden, copy path, remove.
+6. Launch: empty-cell menu, dialog with directory completion, request checks.
+7. systemd unit and the full-screen app window on DP-2.
