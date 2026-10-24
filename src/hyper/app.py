@@ -2,10 +2,13 @@
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import AsyncIterable, AsyncIterator
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.sse import EventSourceResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import Headers
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import PlainTextResponse
@@ -26,7 +29,11 @@ from .models import (
     SnapshotEvent,
 )
 
+log = logging.getLogger(__name__)
+
 HEARTBEAT_S = 10.0
+# The built page, in an editable install of this repo.
+WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 LOCAL_HOSTS = ["127.0.0.1", "localhost"]
 SAFE_METHODS = {"GET", "HEAD"}
 
@@ -62,6 +69,8 @@ def create_app(
     store: BoardStore | None = None,
     poll_s: float = POLL_S,
     heartbeat_s: float = HEARTBEAT_S,
+    web_dist: Path | None = WEB_DIST,
+    extra_routes: APIRouter | None = None,
 ) -> FastAPI:
     store = store or BoardStore(cfg.board_path)
     board = Board(store.load(), store.save)
@@ -125,4 +134,11 @@ def create_app(
             raise HTTPException(409, str(e)) from e
         return FocusResult(session_id=result["session_id"], pane=result["pane"])
 
+    if extra_routes is not None:
+        app.include_router(extra_routes)
+    if web_dist is not None:
+        if web_dist.is_dir():
+            app.mount("/", StaticFiles(directory=web_dist, html=True), name="page")
+        else:
+            log.warning("no built page at %s; run `pnpm build` in web/", web_dist)
     return app

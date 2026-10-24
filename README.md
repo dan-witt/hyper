@@ -33,13 +33,22 @@ Board layout and labels are kept in `~/.local/state/hyper/board.json`.
 
 POSTs need an `Origin` of the board itself (or a configured dev origin) and `Content-Type: application/json`.
 
+The page is built into `web/dist` and served by the service:
+
+```sh
+cd web && pnpm install && pnpm build
+```
+
 ## Development
 
 ```sh
 uv run pytest
 uv run ruff check . && uv run ruff format --check .
 uv run pyright
+cd web && pnpm lint && pnpm test && pnpm e2e && pnpm check:api
 ```
+
+`uv run hyper serve --fake` runs the board over demo sessions instead of claude-control.
 
 ## License
 

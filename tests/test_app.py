@@ -53,7 +53,7 @@ async def service(tmp_path) -> AsyncIterator[Service]:
         async with Client(fake.server) as client:
             yield client
 
-    app = create_app(cfg, connect, poll_s=0.2, heartbeat_s=0.3)
+    app = create_app(cfg, connect, poll_s=0.2, heartbeat_s=0.3, web_dist=None)
     app.state.link.retry_s = 0.1
     server = uvicorn.Server(
         uvicorn.Config(app, host="127.0.0.1", port=cfg.port, log_level="warning")
@@ -182,7 +182,7 @@ async def test_unreachable_daemon_is_reported_then_recovers(tmp_path):
         async with Client(fake.server) as client:
             yield client
 
-    app = create_app(cfg, connect, poll_s=0.2, heartbeat_s=0.3)
+    app = create_app(cfg, connect, poll_s=0.2, heartbeat_s=0.3, web_dist=None)
     app.state.link.retry_s = 0.1
     server = uvicorn.Server(
         uvicorn.Config(app, host="127.0.0.1", port=cfg.port, log_level="warning")
@@ -230,7 +230,7 @@ async def test_focus_while_disconnected_is_503(tmp_path):
         raise ConnectionError("daemon down")
         yield  # pragma: no cover
 
-    app = create_app(cfg, connect)
+    app = create_app(cfg, connect, web_dist=None)
     transport = httpx2.ASGITransport(app=app)
     async with httpx2.AsyncClient(transport=transport, base_url="http://127.0.0.1") as http:
         r = await http.post(
@@ -292,3 +292,23 @@ async def test_board_json_is_written(service):
     await until(service, lambda b: tile_ids(b) == ["a"])
     data = json.loads(service.cfg.board_path.read_text())
     assert data["tiles"]["a"]["cell"] == 0
+
+
+@pytest.mark.anyio
+async def test_serves_the_built_page(tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<!doctype html><title>hyper</title>")
+    cfg = Config(state_dir=tmp_path)
+
+    @contextlib.asynccontextmanager
+    async def connect() -> AsyncIterator[Client]:
+        raise ConnectionError("unused")
+        yield  # pragma: no cover
+
+    app = create_app(cfg, connect, web_dist=dist)
+    transport = httpx2.ASGITransport(app=app)
+    async with httpx2.AsyncClient(transport=transport, base_url="http://127.0.0.1") as http:
+        r = await http.get("/")
+        assert r.status_code == 200 and "<title>hyper</title>" in r.text
+        assert (await http.get("/api/board")).status_code == 200

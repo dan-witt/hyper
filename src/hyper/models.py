@@ -5,14 +5,20 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+
+class Model(BaseModel):
+    # Output schemas list defaulted fields as required: the service always sends them.
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+
 State = Literal["starting", "running", "waiting", "idle", "error", "ended"]
 STATES: tuple[State, ...] = ("starting", "running", "waiting", "idle", "error", "ended")
 
 
-class DaemonSession(BaseModel):
+class DaemonSession(Model):
     """One row of claude-control's list_sessions (its DESIGN.md is the contract)."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", json_schema_serialization_defaults_required=True)
 
     session_id: str
     name: str | None = None
@@ -31,7 +37,7 @@ class DaemonSession(BaseModel):
     replaces: str | None = None
 
 
-class Grid(BaseModel):
+class Grid(Model):
     columns: int = Field(default=3, ge=1)
     rows: int = Field(default=2, ge=1)
 
@@ -39,7 +45,7 @@ class Grid(BaseModel):
 # --- board.json
 
 
-class StoredTile(BaseModel):
+class StoredTile(Model):
     cell: int | None  # reading-order index into the grid; None while hidden
     label: str | None = None
     description: str | None = None
@@ -47,7 +53,7 @@ class StoredTile(BaseModel):
     acked_state_since: datetime | None = None
 
 
-class BoardFile(BaseModel):
+class BoardFile(Model):
     version: Literal[1] = 1
     grid: Grid = Field(default_factory=Grid)
     tiles: dict[str, StoredTile] = Field(default_factory=dict)  # by session_id
@@ -56,7 +62,7 @@ class BoardFile(BaseModel):
 # --- what the page sees
 
 
-class Tile(BaseModel):
+class Tile(Model):
     session_id: str
     cell: int | None
     label: str | None
@@ -66,43 +72,43 @@ class Tile(BaseModel):
     session: DaemonSession
 
 
-class DaemonStatus(BaseModel):
+class DaemonStatus(Model):
     connected: bool
     error: str | None = None
 
 
-class BoardView(BaseModel):
+class BoardView(Model):
     grid: Grid
     tiles: list[Tile]
     daemon: DaemonStatus
 
 
-class SnapshotEvent(BaseModel):
+class SnapshotEvent(Model):
     type: Literal["snapshot"] = "snapshot"
     board: BoardView
 
 
-class TileEvent(BaseModel):
+class TileEvent(Model):
     type: Literal["tile"] = "tile"
     tile: Tile
 
 
-class TileRemovedEvent(BaseModel):
+class TileRemovedEvent(Model):
     type: Literal["tile_removed"] = "tile_removed"
     session_id: str
 
 
-class GridEvent(BaseModel):
+class GridEvent(Model):
     type: Literal["grid"] = "grid"
     grid: Grid
 
 
-class DaemonEvent(BaseModel):
+class DaemonEvent(Model):
     type: Literal["daemon"] = "daemon"
     daemon: DaemonStatus
 
 
-class HeartbeatEvent(BaseModel):
+class HeartbeatEvent(Model):
     type: Literal["heartbeat"] = "heartbeat"
 
 
@@ -113,6 +119,6 @@ BoardEvent = Annotated[
 Change = TileEvent | TileRemovedEvent | GridEvent
 
 
-class FocusResult(BaseModel):
+class FocusResult(Model):
     session_id: str
     pane: str

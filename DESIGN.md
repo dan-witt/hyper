@@ -64,7 +64,8 @@ Rename, description, acknowledge and hide are board state; they never change the
 ## Page
 
 - React 19, TypeScript, Vite, pnpm. dnd-kit for drag, Radix primitives for the context menu and dialog, Tailwind v4, a Zustand store fed by SSE.
-- Dark only. Readable from the side of the desk: large type, state shown as a thick coloured left edge plus a tinted background.
+- Dark only. Readable from the side of the desk: large type, state shown as a thick coloured left edge plus a tinted background. Each grid cell is a CSS size container and a tile's type, edges and padding are in container units, so a tile reads the same at any screen size or grid shape.
+- The page keeps no state beyond the latest snapshot plus changes; it reconnects the SSE stream when `EventSource` gives up or when no message (heartbeats included) arrives for 25s.
 - Shown as a full-screen app window on DP-2; 2 columns when it gets half a monitor.
 - Dev: the Vite dev server proxies `/api` to the service. Production: the service serves the built `web/dist`.
 
