@@ -1,7 +1,7 @@
 import type { Session, Tile } from '../api/types'
 
 /** The decorator a tile gets; styled in index.css by `data-tone`. */
-export type Tone = 'run' | 'wait' | 'acked' | 'idle' | 'error' | 'off' | 'start'
+export type Tone = 'run' | 'wait' | 'acked' | 'idle' | 'error' | 'error-acked' | 'off' | 'start'
 
 export function tone(tile: Tile): Tone {
   switch (tile.session.state) {
@@ -12,7 +12,7 @@ export function tone(tile: Tile): Tone {
     case 'idle':
       return 'idle'
     case 'error':
-      return 'error'
+      return tile.acknowledged ? 'error-acked' : 'error'
     case 'ended':
       return 'off'
     case 'starting':
@@ -58,6 +58,12 @@ export function formatAge(seconds: number): string {
   if (s < 3600) return `${Math.floor(s / 60)}m`
   if (s < 86400) return `${Math.floor(s / 3600)}h`
   return `${Math.floor(s / 86400)}d`
+}
+
+/** Whether the tile shows something the user can acknowledge. */
+export function canAcknowledge(tile: Tile): boolean {
+  const { state } = tile.session
+  return !tile.acknowledged && (state === 'waiting' || state === 'error')
 }
 
 export const PULSE_WINDOW_MS = 5_000

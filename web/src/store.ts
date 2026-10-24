@@ -55,17 +55,27 @@ export function moveTile(board: BoardData, sessionId: string, cell: number): Boa
   return { ...board, tiles }
 }
 
+/** A short message over the board: a failed action, or confirmation of one. */
+export interface Notice {
+  message: string
+  kind: 'error' | 'info'
+}
+
 interface BoardStore extends BoardData {
   connection: Connection
+  notice: Notice | null
   apply: (event: BoardEvent) => void
   moveLocal: (sessionId: string, cell: number) => void
   setConnection: (connection: Connection) => void
+  notify: (notice: Notice | null) => void
 }
 
 export const useBoard = create<BoardStore>()((set) => ({
   ...initialBoard,
   connection: 'connecting',
+  notice: null,
   apply: (event) => set((state) => applyEvent(state, event)),
   moveLocal: (sessionId, cell) => set((state) => moveTile(state, sessionId, cell)),
   setConnection: (connection) => set({ connection }),
+  notify: (notice) => set({ notice }),
 }))

@@ -77,6 +77,10 @@ body {
   --tone: var(--color-error);
   --tint: 30%;
 }
+.tile[data-tone='error-acked'] {
+  --tone: color-mix(in oklab, var(--color-error) 40%, var(--color-panel));
+  --tint: 0%;
+}
 .tile[data-tone='start'] {
   --tone: var(--color-start);
   --tint: 8%;
@@ -197,4 +201,125 @@ body {
   color: #fee2e2;
   font-size: clamp(1rem, 1.2vw, 1.8rem);
   font-weight: 600;
+}
+.banner-info {
+  background: #1e293b;
+  color: #e5e7eb;
+}
+
+/* Menus and dialogs are used up close, so they size with the viewport rather than the tiles. */
+.menu {
+  z-index: 50;
+  min-width: 16em;
+  border: 1px solid #273142;
+  border-radius: 0.75rem;
+  background: var(--color-panel);
+  padding: 0.35em;
+  font-size: clamp(1rem, 0.85vw, 1.6rem);
+  box-shadow: 0 1rem 2.5rem rgb(0 0 0 / 0.6);
+}
+.menu-label {
+  max-width: 20em;
+  padding: 0.4em 0.8em;
+  color: #94a3b8;
+  font-size: 0.85em;
+  font-weight: 650;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  border-radius: 0.5rem;
+  padding: 0.45em 0.8em;
+  cursor: default;
+  outline: none;
+  user-select: none;
+}
+.menu-item[data-highlighted],
+.menu-item[data-state='open'] {
+  background: #273142;
+}
+.menu-item[data-disabled] {
+  color: #4b5563;
+}
+.menu-item.danger {
+  color: var(--color-error);
+}
+.menu-hint {
+  margin-left: auto;
+  padding-left: 1.5em;
+  color: #64748b;
+  font-size: 0.85em;
+}
+.menu-check {
+  width: 1em;
+}
+.menu-separator {
+  margin: 0.3em 0.2em;
+  height: 1px;
+  background: #273142;
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgb(0 0 0 / 0.6);
+}
+.dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 61;
+  width: min(34em, calc(100vw - 2rem));
+  transform: translate(-50%, -50%);
+  border: 1px solid #273142;
+  border-radius: 1rem;
+  background: var(--color-panel);
+  padding: 1.5em;
+  font-size: clamp(1rem, 0.85vw, 1.6rem);
+  box-shadow: 0 1.5rem 3rem rgb(0 0 0 / 0.7);
+}
+.dialog-title {
+  font-size: 1.3em;
+  font-weight: 650;
+}
+.dialog-hint {
+  color: #94a3b8;
+  font-size: 0.9em;
+}
+.dialog-error {
+  color: var(--color-error);
+}
+.field {
+  width: 100%;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  background: var(--color-ink);
+  padding: 0.5em 0.7em;
+  color: inherit;
+}
+.field:focus {
+  border-color: #94a3b8;
+  outline: none;
+}
+.button {
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  padding: 0.45em 1.1em;
+}
+.button:hover {
+  background: #1e293b;
+}
+.button-primary {
+  border-color: #e5e7eb;
+  background: #e5e7eb;
+  color: var(--color-ink);
+  font-weight: 650;
+}
+.button-primary:hover {
+  background: #fff;
+}
+.button:disabled {
+  opacity: 0.5;
 }

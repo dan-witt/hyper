@@ -3,7 +3,7 @@
 import asyncio
 import contextlib
 import logging
-from collections.abc import AsyncIterable, AsyncIterator
+from collections.abc import AsyncIterable, AsyncIterator, Callable
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, HTTPException
@@ -21,6 +21,7 @@ from .hub import Hub
 from .models import (
     BoardEvent,
     BoardView,
+    Change,
     DaemonEvent,
     DaemonSession,
     DaemonStatus,
@@ -29,7 +30,9 @@ from .models import (
     GridRequest,
     HeartbeatEvent,
     MoveRequest,
+    ShowRequest,
     SnapshotEvent,
+    TileEdit,
 )
 
 log = logging.getLogger(__name__)
@@ -137,15 +140,44 @@ def create_app(
             raise HTTPException(409, str(e)) from e
         return FocusResult(session_id=result["session_id"], pane=result["pane"])
 
-    @app.post("/api/tiles/{session_id}/move", status_code=204)
-    def move(session_id: str, body: MoveRequest) -> None:
-        """Put the tile in a cell, swapping with the tile already there."""
+    def tile_action(session_id: str, action: Callable[[], list[Change]]) -> None:
         try:
-            hub.publish(*board.move(session_id, body.cell))
+            hub.publish(*action())
         except NoSuchTile as e:
             raise HTTPException(404, f"no tile for session {session_id}") from e
         except BoardError as e:
             raise HTTPException(409, str(e)) from e
+
+    @app.post("/api/tiles/{session_id}/move", status_code=204)
+    def move(session_id: str, body: MoveRequest) -> None:
+        """Put the tile in a cell, swapping with the tile already there."""
+        tile_action(session_id, lambda: board.move(session_id, body.cell))
+
+    @app.patch("/api/tiles/{session_id}", status_code=204)
+    def edit(session_id: str, body: TileEdit) -> None:
+        """Set the board label or description. They never change the session."""
+        fields = body.model_dump(include=body.model_fields_set)
+        tile_action(session_id, lambda: board.edit(session_id, fields))
+
+    @app.post("/api/tiles/{session_id}/acknowledge", status_code=204)
+    def acknowledge(session_id: str) -> None:
+        """Mute a waiting or errored tile until its state changes."""
+        tile_action(session_id, lambda: board.acknowledge(session_id))
+
+    @app.post("/api/tiles/{session_id}/hide", status_code=204)
+    def hide(session_id: str) -> None:
+        """Take the tile off the grid, freeing its cell."""
+        tile_action(session_id, lambda: board.hide(session_id))
+
+    @app.post("/api/tiles/{session_id}/show", status_code=204)
+    def show(session_id: str, body: ShowRequest) -> None:
+        """Put a hidden tile in the given empty cell, or the first free one."""
+        tile_action(session_id, lambda: board.show(session_id, body.cell))
+
+    @app.delete("/api/tiles/{session_id}", status_code=204)
+    def remove(session_id: str) -> None:
+        """Remove an ended session's tile."""
+        tile_action(session_id, lambda: board.remove(session_id))
 
     @app.post("/api/grid")
     def set_grid(body: GridRequest) -> Grid:

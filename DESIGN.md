@@ -45,9 +45,9 @@ Added to claude-control for the board (`DESIGN.md` there is the contract):
 - Resizing the grid keeps each tile's reading-order index, so tiles reflow when the column count changes; rows never drop below what the occupied cells need. The grid never shrinks by itself.
 - Drag uses `@dnd-kit/core` with an 8px activation distance, so a click still focuses; the click that ends a drag is ignored. The page moves the tile at once and resyncs from `/api/board` if the service refuses the move.
 - Pulse: about 3s when a tile enters `waiting` (any reason) or `error`, only when `state_since` is under 5s old, so reloading the page does not pulse every tile.
-- Acknowledge stores the tile's `state_since`; the tile is muted until `state_since` changes.
-- A hidden tile gives up its cell; unhiding puts it in the first free cell.
-- An ended session that was not replaced keeps a hollow Offline tile until it is removed, or until the daemon forgets the session (24h).
+- Acknowledge applies to `waiting` and `error` tiles. It stores the tile's `state_since`; the tile is muted until `state_since` changes.
+- A hidden tile gives up its cell. "Show hidden" on an empty cell puts the chosen tile in that cell; the API without a cell uses the first free one.
+- An ended session that was not replaced keeps a hollow Offline tile until it is removed, or until the daemon forgets the session (24h). Only an ended session's tile can be removed; a live one can only be hidden, since the board would otherwise make it a new tile on the next listing.
 - `--bg` sessions and sessions outside tmux get tiles; a failed focus shows the daemon's error as a toast.
 - Daemon unreachable: a banner, tiles greyed with their last state, automatic reconnect.
 
@@ -57,11 +57,11 @@ Added to claude-control for the board (`DESIGN.md` there is the contract):
 | --- | --- |
 | Click a tile | `focus_session` |
 | Right-click a tile | Acknowledge, rename (board label), edit description, hide, copy project path, remove (ended tiles) |
-| Right-click an empty cell | Launch a session into that cell; "Show hidden (n)" |
+| Right-click an empty cell | Launch a session into that cell; "Show hidden (n)"; grid size (presets and a custom columns × rows dialog) |
 
 The launch dialog has a directory field with completion served by the board service (default: the last directory launched in), an optional name and a multi-line prompt; `Ctrl+Enter` launches. The board does not focus the new session.
 
-Rename, description, acknowledge and hide are board state; they never change the session.
+Rename, description, acknowledge and hide are board state; they never change the session. A blank label or description clears it, and the tile falls back to the session name or project path.
 
 ## Page
 

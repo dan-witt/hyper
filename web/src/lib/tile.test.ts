@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { NOW, iso, makeTile } from '../test/fixtures'
-import { displayName, formatAge, shouldPulse, stateLabel, subtitle, tone } from './tile'
+import { canAcknowledge, displayName, formatAge, shouldPulse, stateLabel, subtitle, tone } from './tile'
 
 describe('tone', () => {
   it('maps states to decorators', () => {
@@ -9,6 +9,7 @@ describe('tone', () => {
     expect(tone(makeTile({ acknowledged: true }, { state: 'waiting', reason: 'done' }))).toBe('acked')
     expect(tone(makeTile({}, { state: 'idle' }))).toBe('idle')
     expect(tone(makeTile({}, { state: 'error' }))).toBe('error')
+    expect(tone(makeTile({ acknowledged: true }, { state: 'error' }))).toBe('error-acked')
     expect(tone(makeTile({}, { state: 'ended' }))).toBe('off')
     expect(tone(makeTile({}, { state: 'starting' }))).toBe('start')
   })
@@ -54,5 +55,12 @@ describe('shouldPulse', () => {
     expect(
       shouldPulse(makeTile({ acknowledged: true }, { state: 'waiting', state_since: iso(1_000) }), NOW),
     ).toBe(false)
+  })
+
+  it('offers acknowledge only for an unacknowledged waiting or errored tile', () => {
+    expect(canAcknowledge(makeTile({}, { state: 'waiting', reason: 'permission' }))).toBe(true)
+    expect(canAcknowledge(makeTile({}, { state: 'error' }))).toBe(true)
+    expect(canAcknowledge(makeTile({ acknowledged: true }, { state: 'waiting' }))).toBe(false)
+    expect(canAcknowledge(makeTile({}, { state: 'running' }))).toBe(false)
   })
 })

@@ -93,3 +93,120 @@ test('grid size changes reflow the tiles', async ({ page, request }) => {
   await request.post('/api/grid', { data: { columns: 3, rows: 2 }, headers: ORIGIN })
   await expect(page.getByTestId('cell')).toHaveCount(6)
 })
+
+async function openMenu(page: import('@playwright/test').Page, target: import('@playwright/test').Locator) {
+  await target.click({ button: 'right' })
+  const menu = page.getByTestId('cell-menu')
+  await expect(menu).toBeVisible()
+  return menu
+}
+
+/**
+ * Move the mouse to an element along a path, as a pointer does. Radix closes a submenu that
+ * opened to the left when the pointer jumps into it in one step.
+ */
+async function pointTo(page: import('@playwright/test').Page, target: import('@playwright/test').Locator) {
+  const box = await target.boundingBox()
+  if (!box) throw new Error('missing element')
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 20 })
+}
+
+/** The cell element of the last empty cell, and its index. */
+async function lastEmptyCell(page: import('@playwright/test').Page) {
+  const cell = page.getByTestId('cell').filter({ has: page.getByTestId('empty-cell') }).last()
+  return { cell, index: Number(await cell.getAttribute('data-cell')) }
+}
+
+test('acknowledge mutes a waiting tile until its state changes', async ({ page, request }) => {
+  await fake(request, '/sessions/e2e-ack', { fields: { name: 'e2e-ack', state: 'waiting', reason: 'done' } })
+  await page.goto('/')
+  await expect(tile(page, 'e2e-ack')).toHaveAttribute('data-tone', 'wait')
+  await (await openMenu(page, tile(page, 'e2e-ack'))).getByRole('menuitem', { name: 'Acknowledge' }).click()
+  await expect(tile(page, 'e2e-ack')).toHaveAttribute('data-tone', 'acked')
+  await fake(request, '/sessions/e2e-ack', { fields: { state: 'waiting', reason: 'permission' } })
+  await expect(tile(page, 'e2e-ack')).toHaveAttribute('data-tone', 'wait')
+  await fake(request, '/sessions/e2e-ack/remove')
+})
+
+test('rename and description are set in dialogs, saved, and cleared back', async ({ page }) => {
+  await page.goto('/')
+  const docs = tile(page, 'docs')
+  await (await openMenu(page, docs)).getByRole('menuitem', { name: 'Rename…' }).click()
+  const name = page.getByRole('textbox', { name: 'Rename tile' })
+  await expect(name).toBeFocused()
+  await name.fill('Docs site')
+  await name.press('Enter')
+  await expect(page.getByTestId('dialog')).toHaveCount(0)
+  await expect(docs.locator('.tile-name')).toHaveText('Docs site')
+
+  await (await openMenu(page, docs)).getByRole('menuitem', { name: 'Edit description…' }).click()
+  await page.getByRole('textbox', { name: 'Tile description' }).fill('migrating to the new theme')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(docs.locator('.tile-subtitle')).toHaveText('migrating to the new theme')
+
+  await page.reload()
+  await expect(docs.locator('.tile-name')).toHaveText('Docs site')
+  await (await openMenu(page, docs)).getByRole('menuitem', { name: 'Rename…' }).click()
+  await page.getByRole('textbox', { name: 'Rename tile' }).fill('')
+  await page.keyboard.press('Enter')
+  await expect(docs.locator('.tile-name')).toHaveText('docs')
+  await (await openMenu(page, docs)).getByRole('menuitem', { name: 'Edit description…' }).click()
+  await page.getByRole('textbox', { name: 'Tile description' }).fill('')
+  await page.keyboard.press('Enter')
+  await expect(docs.locator('.tile-subtitle')).toHaveText('/work/docs')
+})
+
+test('hide frees the cell; show hidden puts the tile in the cell right-clicked', async ({ page }) => {
+  await page.goto('/')
+  await (await openMenu(page, tile(page, 'infra'))).getByRole('menuitem', { name: 'Hide' }).click()
+  await expect(tile(page, 'infra')).toHaveCount(0)
+
+  const { cell, index } = await lastEmptyCell(page)
+  const menu = await openMenu(page, cell)
+  await menu.getByRole('menuitem', { name: /Show hidden \(1\)/ }).hover()
+  await pointTo(page, page.getByRole('menuitem', { name: /infra/ }))
+  await page.getByRole('menuitem', { name: /infra/ }).click()
+  await expect(page.locator(`[data-cell="${index}"]`).getByTestId('tile')).toHaveAttribute('data-session', 'infra')
+})
+
+test('the grid size is set from the empty-cell menu', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('cell')).toHaveCount(6)
+  let menu = await openMenu(page, (await lastEmptyCell(page)).cell)
+  await menu.getByRole('menuitem', { name: /Grid size/ }).hover()
+  await pointTo(page, page.getByRole('menuitemradio', { name: '4 × 2' }))
+  await page.getByRole('menuitemradio', { name: '4 × 2' }).click()
+  await expect(page.getByTestId('cell')).toHaveCount(8)
+
+  menu = await openMenu(page, (await lastEmptyCell(page)).cell)
+  await menu.getByRole('menuitem', { name: /Grid size/ }).hover()
+  await expect(page.getByRole('menuitemradio', { name: '4 × 2' })).toHaveAttribute('aria-checked', 'true')
+  await pointTo(page, page.getByRole('menuitem', { name: 'Custom…' }))
+  await page.getByRole('menuitem', { name: 'Custom…' }).click()
+  const columns = page.getByRole('spinbutton', { name: 'Columns' })
+  await expect(columns).toBeFocused()
+  await columns.fill('3')
+  await page.getByRole('spinbutton', { name: 'Rows' }).fill('2')
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('cell')).toHaveCount(6)
+})
+
+test('copy the project path; remove an ended tile', async ({ page, context, request }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.goto('/')
+  await (await openMenu(page, tile(page, 'auth'))).getByRole('menuitem', { name: 'Copy project path' }).click()
+  await expect(page.getByTestId('notice')).toHaveText('Copied /work/auth')
+  expect(await page.evaluate('navigator.clipboard.readText()')).toBe('/work/auth')
+
+  await fake(request, '/sessions/e2e-end', { fields: { name: 'e2e-end', state: 'running' } })
+  await expect(tile(page, 'e2e-end')).toBeVisible()
+  let menu = await openMenu(page, tile(page, 'e2e-end'))
+  await expect(menu.getByRole('menuitem', { name: 'Remove' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await fake(request, '/sessions/e2e-end', { fields: { state: 'ended' } })
+  await expect(tile(page, 'e2e-end')).toHaveAttribute('data-tone', 'off')
+  menu = await openMenu(page, tile(page, 'e2e-end'))
+  await menu.getByRole('menuitem', { name: 'Remove' }).click()
+  await expect(tile(page, 'e2e-end')).toHaveCount(0)
+  await fake(request, '/sessions/e2e-end/remove')
+})

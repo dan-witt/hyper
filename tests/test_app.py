@@ -356,3 +356,65 @@ async def test_move_errors(service):
             f"{service.url}/api/grid", json={"columns": 0, "rows": 1}, headers=service.origin
         )
         assert r.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_tile_actions_are_pushed_and_saved(service):
+    service.fake.add("a", state="waiting", reason="done")
+    service.fake.add("b")
+    await until(service, lambda b: tile_ids(b) == ["a", "b"])
+    url = f"{service.url}/api/tiles"
+    async with stream(service) as events, httpx2.AsyncClient() as http:
+        await next_event(events, "snapshot")
+
+        r = await http.patch(
+            f"{url}/a", json={"label": "  billing ", "description": ""}, headers=service.origin
+        )
+        assert r.status_code == 204
+        tile = (await next_event(events, "tile"))["tile"]
+        assert (tile["label"], tile["description"]) == ("billing", None)
+
+        r = await http.post(f"{url}/a/acknowledge", json={}, headers=service.origin)
+        assert r.status_code == 204
+        assert (await next_event(events, "tile"))["tile"]["acknowledged"]
+
+        r = await http.post(f"{url}/b/hide", json={}, headers=service.origin)
+        assert r.status_code == 204
+        tile = (await next_event(events, "tile"))["tile"]
+        assert (tile["hidden"], tile["cell"]) == (True, None)
+
+        r = await http.post(f"{url}/b/show", json={"cell": 4}, headers=service.origin)
+        assert r.status_code == 204
+        assert (await next_event(events, "tile"))["tile"]["cell"] == 4
+
+        service.fake.update("b", state="ended")
+        await service.fake.notify()
+        await next_event(events, "tile")
+        r = await http.request(
+            "DELETE", f"{url}/b", headers={**service.origin, "content-type": "application/json"}
+        )
+        assert r.status_code == 204
+        assert (await next_event(events, "tile_removed"))["session_id"] == "b"
+    data = json.loads(service.cfg.board_path.read_text())
+    assert list(data["tiles"]) == ["a"]
+    assert data["tiles"]["a"]["label"] == "billing"
+
+
+@pytest.mark.anyio
+async def test_tile_action_errors(service):
+    service.fake.add("a", state="running")
+    await until(service, lambda b: tile_ids(b) == ["a"])
+    url = f"{service.url}/api/tiles"
+    async with httpx2.AsyncClient() as http:
+        r = await http.post(f"{url}/a/acknowledge", json={}, headers=service.origin)
+        assert (r.status_code, r.json()["detail"]) == (409, "nothing to acknowledge while running")
+        r = await http.patch(f"{url}/a", json={"label": "x" * 61}, headers=service.origin)
+        assert r.status_code == 422
+        r = await http.patch(f"{url}/zzz", json={"label": "x"}, headers=service.origin)
+        assert r.status_code == 404
+        r = await http.request(
+            "DELETE", f"{url}/a", headers={**service.origin, "content-type": "application/json"}
+        )
+        assert r.status_code == 409
+        r = await http.request("DELETE", f"{url}/a", headers=service.origin)
+        assert r.status_code == 415  # the request checks cover every unsafe method

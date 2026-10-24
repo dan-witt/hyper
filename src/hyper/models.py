@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 
 class Model(BaseModel):
@@ -121,6 +121,25 @@ Change = TileEvent | TileRemovedEvent | GridEvent
 
 class MoveRequest(Model):
     cell: int = Field(ge=0)
+
+
+def _blank_is_none(value: str | None) -> str | None:
+    return (value or "").strip() or None
+
+
+Label = Annotated[str | None, Field(max_length=60), AfterValidator(_blank_is_none)]
+Description = Annotated[str | None, Field(max_length=200), AfterValidator(_blank_is_none)]
+
+
+class TileEdit(Model):
+    """Fields left out are unchanged; null or blank clears one."""
+
+    label: Label = None
+    description: Description = None
+
+
+class ShowRequest(Model):
+    cell: int | None = Field(default=None, ge=0)
 
 
 class GridRequest(Model):

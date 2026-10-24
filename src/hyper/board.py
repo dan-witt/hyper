@@ -142,6 +142,69 @@ class Board:
 
         return self._mutate(apply)
 
+    def edit(self, session_id: str, fields: dict[str, str | None]) -> list[Change]:
+        """Set the board label and/or description; None clears one."""
+        stored = self._shown(session_id)
+
+        def apply() -> None:
+            if "label" in fields:
+                stored.label = fields["label"]
+            if "description" in fields:
+                stored.description = fields["description"]
+
+        return self._mutate(apply)
+
+    def acknowledge(self, session_id: str) -> list[Change]:
+        """Mute a waiting or errored tile until the session's state changes."""
+        stored = self._shown(session_id)
+        session = self.sessions[session_id]
+        if session.state not in ("waiting", "error"):
+            raise BoardError(f"nothing to acknowledge while {session.state}")
+
+        def apply() -> None:
+            stored.acked_state_since = session.state_since
+
+        return self._mutate(apply)
+
+    def hide(self, session_id: str) -> list[Change]:
+        """Take the tile off the grid; its cell becomes free."""
+        stored = self._shown(session_id)
+
+        def apply() -> None:
+            stored.hidden, stored.cell = True, None
+
+        return self._mutate(apply)
+
+    def show(self, session_id: str, cell: int | None = None) -> list[Change]:
+        """Put a hidden tile back, in `cell` if given (it must be empty), else the first free
+        cell."""
+        stored = self._shown(session_id)
+        if not stored.hidden:
+            raise BoardError("the tile is not hidden")
+        if cell is not None:
+            grid = self.data.grid
+            if not 0 <= cell < grid.columns * grid.rows:
+                raise BoardError(f"cell {cell} is outside the {grid.columns}x{grid.rows} grid")
+            if any(t.cell == cell for t in self.data.tiles.values()):
+                raise BoardError(f"cell {cell} is taken")
+
+        def apply() -> None:
+            stored.hidden = False
+            stored.cell = self._free_cell() if cell is None else cell
+
+        return self._mutate(apply)
+
+    def remove(self, session_id: str) -> list[Change]:
+        """Drop an ended session's tile. A live session's tile can only be hidden."""
+        self._shown(session_id)
+        if self.sessions[session_id].state != "ended":
+            raise BoardError("only an offline tile can be removed; hide a live one")
+
+        def apply() -> None:
+            del self.data.tiles[session_id]
+
+        return self._mutate(apply)
+
     def set_grid(self, columns: int, rows: int) -> list[Change]:
         """Resize the grid. Cells keep their reading-order index, so tiles reflow when the
         column count changes; rows never drop below what the occupied cells need."""

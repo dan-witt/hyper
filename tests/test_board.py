@@ -210,3 +210,83 @@ def test_moves_are_saved():
     board.update([session("a", 1)])
     board.move("a", 2)
     assert saved[-1].tiles["a"].cell == 2
+
+
+def test_edit_sets_and_clears_label_and_description():
+    board = Board(BoardFile())
+    board.update([session("a", 1)])
+    [change] = board.edit("a", {"label": "billing", "description": "invoice export"})
+    assert isinstance(change, TileEvent)
+    assert (change.tile.label, change.tile.description) == ("billing", "invoice export")
+    board.edit("a", {"label": None})
+    assert (board.data.tiles["a"].label, board.data.tiles["a"].description) == (
+        None,
+        "invoice export",
+    )
+    with pytest.raises(NoSuchTile):
+        board.edit("nobody", {"label": "x"})
+
+
+@pytest.mark.parametrize("state", ["waiting", "error"])
+def test_acknowledge_mutes_until_the_state_changes(state):
+    board = Board(BoardFile())
+    board.update([session("a", 1, state=state, reason="done")])
+    [change] = board.acknowledge("a")
+    assert isinstance(change, TileEvent) and change.tile.acknowledged
+    board.update([session("a", 1, state="running", state_since=T0 + timedelta(minutes=2))])
+    assert not board.tiles()[0].acknowledged
+
+
+def test_acknowledge_refuses_a_session_that_needs_nothing():
+    board = Board(BoardFile())
+    board.update([session("a", 1, state="running")])
+    with pytest.raises(BoardError, match="nothing to acknowledge while running"):
+        board.acknowledge("a")
+
+
+def test_hide_frees_the_cell_and_show_puts_the_tile_back():
+    board = Board(BoardFile())
+    board.update([session("a", 1), session("b", 2)])
+    board.hide("a")
+    assert cells(board) == {"a": None, "b": 1}
+    assert board.tiles()[0].hidden
+    board.update([session("a", 1), session("b", 2), session("c", 3)])
+    assert cells(board)["c"] == 0  # the hidden tile's cell was free
+    board.show("a")
+    assert cells(board)["a"] == 2
+    board.hide("a")
+    board.show("a", 5)
+    assert cells(board)["a"] == 5
+    assert not board.data.tiles["a"].hidden
+
+
+def test_show_refuses_a_taken_cell_a_cell_outside_and_a_shown_tile():
+    board = Board(BoardFile())
+    board.update([session("a", 1), session("b", 2)])
+    board.hide("a")
+    with pytest.raises(BoardError, match="cell 1 is taken"):
+        board.show("a", 1)
+    with pytest.raises(BoardError, match="outside"):
+        board.show("a", 6)
+    with pytest.raises(BoardError, match="not hidden"):
+        board.show("b")
+
+
+def test_show_with_a_full_grid_adds_a_row():
+    board = Board(BoardFile(grid=Grid(columns=1, rows=1)))
+    board.update([session("a", 1)])
+    board.hide("a")
+    board.update([session("a", 1), session("b", 2)])
+    board.show("a")
+    assert (board.data.grid, cells(board)) == (Grid(columns=1, rows=2), {"a": 1, "b": 0})
+
+
+def test_remove_only_drops_ended_tiles_and_they_stay_gone():
+    board = Board(BoardFile())
+    board.update([session("a", 1), session("b", 2)])
+    with pytest.raises(BoardError, match="only an offline tile"):
+        board.remove("a")
+    board.update([session("a", 1, state="ended"), session("b", 2)])
+    assert board.remove("a") == [TileRemovedEvent(session_id="a")]
+    board.update([session("a", 1, state="ended"), session("b", 2)])
+    assert list(board.data.tiles) == ["b"]

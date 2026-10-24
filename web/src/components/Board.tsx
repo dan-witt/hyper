@@ -9,9 +9,12 @@ import {
 } from '@dnd-kit/core'
 import { useEffect, useState } from 'react'
 import { fetchBoard, moveTile } from '../api/client'
-import type { Tile } from '../api/types'
+import type { Grid, Tile } from '../api/types'
 import { markDragEnd } from '../lib/dragGuard'
 import { useBoard } from '../store'
+import { BoardDialog } from './BoardDialog'
+import type { DialogRequest } from '../lib/actions'
+import { CellMenu } from './CellMenu'
 import { StatusBanner } from './StatusBanner'
 import { TileCard } from './TileCard'
 
@@ -46,16 +49,28 @@ function DraggableTile({ tile, now, stale }: TileProps) {
   )
 }
 
-function Cell({ cell, tile, now, stale }: { cell: number; tile: Tile | undefined; now: number; stale: boolean }) {
+interface CellProps {
+  cell: number
+  tile: Tile | undefined
+  now: number
+  stale: boolean
+  grid: Grid
+  hidden: Tile[]
+  onDialog: (d: DialogRequest) => void
+}
+
+function Cell({ cell, tile, now, stale, grid, hidden, onDialog }: CellProps) {
   const { setNodeRef, isOver } = useDroppable({ id: `cell-${cell}`, data: { cell } })
   return (
-    <div ref={setNodeRef} className={`cell${isOver ? ' cell-over' : ''}`} data-cell={cell} data-testid="cell">
-      {tile ? (
-        <DraggableTile tile={tile} now={now} stale={stale} />
-      ) : (
-        <div className="cell-empty" data-testid="empty-cell" />
-      )}
-    </div>
+    <CellMenu cell={cell} tile={tile} grid={grid} hidden={hidden} onDialog={onDialog}>
+      <div ref={setNodeRef} className={`cell${isOver ? ' cell-over' : ''}`} data-cell={cell} data-testid="cell">
+        {tile ? (
+          <DraggableTile tile={tile} now={now} stale={stale} />
+        ) : (
+          <div className="cell-empty" data-testid="empty-cell" />
+        )}
+      </div>
+    </CellMenu>
   )
 }
 
@@ -65,13 +80,14 @@ export function Board() {
   const daemon = useBoard((s) => s.daemon)
   const connection = useBoard((s) => s.connection)
   const loaded = useBoard((s) => s.loaded)
+  const notice = useBoard((s) => s.notice)
   const now = useNow(1_000)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [dialog, setDialog] = useState<DialogRequest | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
   useEffect(() => {
     if (!notice) return
-    const timer = setTimeout(() => setNotice(null), NOTICE_MS)
+    const timer = setTimeout(() => useBoard.getState().notify(null), NOTICE_MS)
     return () => clearTimeout(timer)
   }, [notice])
 
@@ -79,12 +95,12 @@ export function Board() {
     markDragEnd()
     const cell = over?.data.current?.cell
     const sessionId = String(active.id)
-    const { tiles: current, moveLocal, apply } = useBoard.getState()
+    const { tiles: current, moveLocal, apply, notify } = useBoard.getState()
     if (typeof cell !== 'number' || current[sessionId]?.cell === cell) return
     moveLocal(sessionId, cell)
     const result = await moveTile(sessionId, cell)
     if (!result.ok) {
-      setNotice(`Could not move the tile: ${result.message}`)
+      notify({ kind: 'error', message: `Could not move the tile: ${result.message}` })
       const board = await fetchBoard()
       if (board) apply({ type: 'snapshot', board })
     }
@@ -92,16 +108,22 @@ export function Board() {
 
   const stale = connection !== 'open' || !daemon.connected
   const byCell = new Map<number, Tile>()
+  const hidden: Tile[] = []
   for (const tile of Object.values(tiles)) {
-    if (!tile.hidden && tile.cell !== null) byCell.set(tile.cell, tile)
+    if (tile.hidden) hidden.push(tile)
+    else if (tile.cell !== null) byCell.set(tile.cell, tile)
   }
 
   return (
     <main className="flex h-full flex-col gap-4 p-4">
       <StatusBanner connection={connection} daemon={daemon} loaded={loaded} />
       {notice && (
-        <div role="alert" className="banner">
-          {notice}
+        <div
+          role={notice.kind === 'error' ? 'alert' : 'status'}
+          className={`banner${notice.kind === 'info' ? ' banner-info' : ''}`}
+          data-testid="notice"
+        >
+          {notice.message}
         </div>
       )}
       <DndContext sensors={sensors} onDragEnd={onDragEnd} onDragCancel={markDragEnd}>
@@ -113,10 +135,20 @@ export function Board() {
           }}
         >
           {Array.from({ length: grid.columns * grid.rows }, (_, cell) => (
-            <Cell key={cell} cell={cell} tile={byCell.get(cell)} now={now} stale={stale} />
+            <Cell
+              key={cell}
+              cell={cell}
+              tile={byCell.get(cell)}
+              now={now}
+              stale={stale}
+              grid={grid}
+              hidden={hidden}
+              onDialog={setDialog}
+            />
           ))}
         </div>
       </DndContext>
+      {dialog && <BoardDialog request={dialog} grid={grid} onClose={() => setDialog(null)} />}
     </main>
   )
 }

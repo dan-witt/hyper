@@ -25,4 +25,4 @@ Page (`web/`, pnpm via corepack):
 
 - The daemon's MCP tool names, state names and session fields are a contract owned by claude-control's `DESIGN.md`; change them there first.
 - The bearer token stays in the board service; nothing sent to the page may contain it.
-- Every POST keeps the Host, Origin and JSON content-type checks: they are what stops another web page from launching sessions.
+- Every POST, PATCH and DELETE keeps the Host, Origin and JSON content-type checks: they are what stops another web page from launching sessions.
