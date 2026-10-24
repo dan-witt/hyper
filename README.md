@@ -4,13 +4,19 @@ A full-screen status board for the Claude Code sessions tracked by [claude-contr
 
 Work in progress ([ECH-18](https://linear.app/echowire/issue/ECH-18)); design and decisions are in [`DESIGN.md`](DESIGN.md).
 
-## Run
+## Install
 
-Needs claude-control running with its MCP token in `~/.config/claude-control/token`.
+Needs claude-control running with its MCP token in `~/.config/claude-control/token`, Google Chrome, and an X11 session (the window is placed through RandR and EWMH).
 
 ```sh
-uv run hyper serve      # http://127.0.0.1:7780
+cd web && pnpm install && pnpm build && cd ..
+uv tool install --editable .
+hyper install-service   # systemd user unit hyper.service on 127.0.0.1:7780, enabled and started
+hyper install-window    # launcher entry, plus autostart at login
+hyper window            # the board full screen on DP-2
 ```
+
+`hyper window` opens the board as a Chrome app window with its own profile (`~/.local/state/hyper/chrome`), or moves the one already open. `--layout left|right` gives it half the monitor; `--monitor` picks another RandR monitor. Run `uv tool install --editable .` again after a dependency change, and `pnpm build` after a page change (the service serves `web/dist` from this checkout).
 
 Optional `~/.config/hyper/config.toml`:
 
@@ -19,6 +25,9 @@ port = 7780
 daemon_url = "http://127.0.0.1:7777/mcp"
 token_path = "~/.config/claude-control/token"
 dev_origins = ["http://localhost:5173"]   # origins allowed to POST besides the board itself
+browser = "google-chrome"
+window_monitor = "DP-2"                     # RandR name, as `xrandr --listmonitors` shows it
+window_layout = "full"                      # or "left" / "right": half the monitor
 ```
 
 Board layout and labels are kept in `~/.local/state/hyper/board.json`.
@@ -43,12 +52,6 @@ Board layout and labels are kept in `~/.local/state/hyper/board.json`.
 
 POST, PATCH and DELETE requests need an `Origin` of the board itself (or a configured dev origin) and `Content-Type: application/json`.
 
-The page is built into `web/dist` and served by the service:
-
-```sh
-cd web && pnpm install && pnpm build
-```
-
 ## Development
 
 ```sh
@@ -58,7 +61,7 @@ uv run pyright
 cd web && pnpm lint && pnpm test && pnpm e2e && pnpm check:api
 ```
 
-`uv run hyper serve --fake` runs the board over demo sessions instead of claude-control. `uv run hyper serve --dev` reads claude-control, allows the Vite dev server (`pnpm dev` in `web/`) and turns launches into a dry run; add `--live-launch` to start real sessions.
+`uv run hyper serve` runs the service from the checkout. `uv run hyper serve --fake` runs the board over demo sessions instead of claude-control. `uv run hyper serve --dev` reads claude-control, allows the Vite dev server (`pnpm dev` in `web/`) and turns launches into a dry run; add `--live-launch` to start real sessions.
 
 ## License
 

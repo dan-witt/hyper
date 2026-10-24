@@ -23,6 +23,10 @@ class Config:
     )
     # Extra origins allowed to POST, such as the Vite dev server.
     dev_origins: list[str] = field(default_factory=list)
+    # `hyper window`: the browser, the RandR monitor name and full, left or right half.
+    browser: str = "google-chrome"
+    window_monitor: str = "DP-2"
+    window_layout: str = "full"
 
     @property
     def board_path(self) -> Path:
@@ -47,7 +51,15 @@ def load(path: Path | None = None) -> Config:
         return Config()
     raw = tomllib.loads(path.read_text())
     cfg = Config()
-    for key in ("host", "port", "daemon_url", "dev_origins"):
+    for key in (
+        "host",
+        "port",
+        "daemon_url",
+        "dev_origins",
+        "browser",
+        "window_monitor",
+        "window_layout",
+    ):
         if key in raw:
             setattr(cfg, key, raw[key])
     for key in ("token_path", "state_dir"):

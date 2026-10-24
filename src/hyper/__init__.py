@@ -37,6 +37,23 @@ def main() -> None:
         action="store_true",
         help="use an in-process fake daemon with demo sessions instead of claude-control",
     )
+    window = sub.add_parser("window", help="show the board as a full-screen app window")
+    window.add_argument("--config", type=Path, help="config file (default: XDG config)")
+    window.add_argument("--monitor", help="RandR monitor name (default: window_monitor, DP-2)")
+    window.add_argument(
+        "--layout",
+        choices=["full", "left", "right"],
+        help="the whole monitor or one half (default: window_layout, full)",
+    )
+    service = sub.add_parser(
+        "install-service", help="install, enable and (re)start the systemd user unit"
+    )
+    service.add_argument("--no-start", action="store_true", help="write the unit only")
+    win_entry = sub.add_parser(
+        "install-window",
+        help="add `hyper window` to the application launcher and to login autostart",
+    )
+    win_entry.add_argument("--no-autostart", action="store_true", help="launcher entry only")
     sub.add_parser("openapi", help="print the API's OpenAPI schema")
     args = parser.parse_args()
 
@@ -47,6 +64,35 @@ def main() -> None:
     if args.command == "openapi":
         app = create_app(config.Config(), http_connect("", lambda: ""), web_dist=None)
         print(json.dumps(app.openapi(), indent=2))
+        return
+    if args.command == "install-service":
+        from . import install
+        from .app import WEB_DIST
+
+        if not (WEB_DIST / "index.html").exists():
+            raise SystemExit(f"no built page at {WEB_DIST}; run `pnpm build` in web/ first")
+        exe = install.executable()
+        path = install.install_service(exe, start=not args.no_start)
+        print(f"wrote {path} (ExecStart={exe} serve)")
+        return
+    if args.command == "install-window":
+        from . import install
+
+        exe = install.executable()
+        for path in install.install_window(exe, autostart=not args.no_autostart):
+            print(f"wrote {path} (Exec={exe} window)")
+        return
+    if args.command == "window":
+        from . import window as win
+
+        cfg = config.load(args.config)
+        layout = args.layout or cfg.window_layout
+        if layout not in win.LAYOUTS:
+            raise SystemExit(f"window_layout must be one of {', '.join(win.LAYOUTS)}")
+        try:
+            print(win.open_window(cfg, args.monitor or cfg.window_monitor, layout))
+        except win.WindowError as e:
+            raise SystemExit(str(e)) from e
         return
 
     cfg = config.load(args.config)

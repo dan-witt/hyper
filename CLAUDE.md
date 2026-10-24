@@ -21,6 +21,8 @@ Page (`web/`, pnpm via corepack):
 - Page work with hot reload: `uv run hyper serve --fake --dev` (or `--dev` alone for the live daemon) and `pnpm dev`; Vite proxies `/api` to port 7780. `--dev` against the live daemon makes launch a dry run; `--live-launch` starts real sessions in the `claude` tmux session, so leave it off unless that is the point.
 - Tile sizes come from CSS container queries on each grid cell (`cqi`/`cqh` in `index.css`), so check a change at 1920x1080 and 3840x2160.
 
+Installed copy: `~/.local/bin/hyper` is an editable `uv tool install` of this checkout, run by `hyper.service` (systemd user unit). A page change needs `pnpm build`; a Python change needs `systemctl --user restart hyper`; a dependency change needs `uv tool install --editable .` again. To try `hyper window` without touching the real board, give it a config with another `port` and `state_dir` and run `hyper serve --fake --config` on the same file; it opens a window on DP-2.
+
 ## Constraints that are easy to break
 
 - The daemon's MCP tool names, state names and session fields are a contract owned by claude-control's `DESIGN.md`; change them there first.
